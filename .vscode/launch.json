@@ -1,0 +1,33 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "chereh-app (Edge local)",
+      "request": "launch",
+      "type": "dart",
+      "deviceId": "edge",
+      "args": [
+        "--web-browser-flag=--ignore-certificate-errors"
+      ]
+    },
+    {
+      "name": "chereh-app (Chrome local)",
+      "request": "launch",
+      "type": "dart",
+      "deviceId": "chrome",
+      "args": [
+        "--web-browser-flag=--ignore-certificate-errors"
+      ]
+    },
+    {
+      "name": "chereh-app (Android émulateur)",
+      "request": "launch",
+      "type": "dart"
+    },
+    {
+  "name": "SM F926U (Android)",
+  "request": "launch",
+  "type": "dart"
+}
+  ]
+}

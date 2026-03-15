@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep:*)",
+      "Bash(grep -r \"evaluationSessions\\\\|sessions.*list\\\\|history\" /c/laragon/www/api.triage/app/Domains/Evaluation/Controllers/Patient/ --include=*.php)",
+      "Read(//c/Users/SURFACE/AppData/Local/Temp/claude/c--dev-Chereh-Projets-chereh-app/517db9cf-6c1c-49a5-bf21-17f2dba9fe92/tasks/**)",
+      "Bash(find C:laragonwwwapi.triage -name *.php -type f -exec grep -l \"enum.*type\\\\|''''portal''''\\\\|''''campaign''''\\\\|''''evaluation''''\\\\|''''anonymous''''\" {})",
+      "Bash(2)",
+      "Bash(find C:laragonwwwapi.triage -type f -name *.php -exec grep -l \"QrCode.*type\\\\|''''type''''.*=>\\\\|case.*portal.*campaign\" {})",
+      "Bash(find C:laragonwwwapi.triageappDomainsAmbassador -type f -name *.php)",
+      "Bash(find C:laragonwwwapi.triageroutes -type f -name *.php)",
+      "Bash(php -r \":*)",
+      "Bash(find C:laragonwwwapi.triageappDomains -name *ScanEvent* -o -name *scan* -type f)",
+      "Bash(flutter analyze:*)"
+    ],
+    "additionalDirectories": [
+      "C:\\laragon\\www\\api.triage\\routes\\patient",
+      "C:\\laragon\\www\\api.triage\\database\\seeders",
+      "C:\\laragon\\www\\api.triage\\routes",
+      "C:\\laragon\\www\\api.triage\\database\\migrations",
+      "C:\\laragon\\www\\api.triage\\app\\Domains\\Ambassador\\Infrastructure\\Persistence\\Models",
+      "C:\\laragon\\www\\api.triage\\app\\Domains\\Ambassador\\Presentation\\Http\\Controllers",
+      "C:\\laragon\\www\\api.triage"
+    ]
+  }
+}

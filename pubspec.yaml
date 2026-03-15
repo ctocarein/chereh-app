@@ -1,0 +1,77 @@
+name: chereh_app
+description: "Chereh mobile app — offline-first, multi-role (Beneficiary, FieldAgent, Ambassador)"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.6.1
+  riverpod_annotation: ^2.6.1
+
+  # Navigation
+  go_router: ^14.8.1
+
+  # HTTP
+  dio: ^5.8.0+1
+
+  # Local DB (offline-first)
+  drift: ^2.23.1
+  sqlite3_flutter_libs: ^0.5.28
+  path_provider: ^2.1.5
+  path: ^1.9.1
+
+  # Secure storage (token)
+  flutter_secure_storage: ^9.2.4
+
+  # Network detection
+  connectivity_plus: ^6.1.4
+
+  # Models (immutable + JSON)
+  freezed_annotation: ^3.0.0
+  json_annotation: ^4.9.0
+
+  # Onboarding / premier lancement
+  shared_preferences: ^2.3.3
+  smooth_page_indicator: ^1.2.0
+
+  # Téléphone
+  intl_phone_number_input: ^0.7.4
+
+  # QR — scan caméra & affichage
+  mobile_scanner: ^6.0.2
+  qr_flutter: ^4.1.0
+
+  # Attribution parrainage
+  device_info_plus: ^10.1.2
+
+  # Fichiers & médias
+  image_picker: ^1.1.2
+  file_picker: ^8.1.7
+
+  # Utils
+  intl: ^0.20.2
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+  # Code generation
+  build_runner: ^2.4.15
+  riverpod_generator: ^2.6.5
+  drift_dev: ^2.23.1
+  freezed: ^3.0.0
+  json_serializable: ^6.9.4
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/icons/
