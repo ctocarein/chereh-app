@@ -348,10 +348,12 @@ class _EvalSummary {
   final double progress;
   final bool hasStarted;
   final bool isComplete;
+  final String? terminationType;
   const _EvalSummary({
     required this.progress,
     required this.hasStarted,
     required this.isComplete,
+    this.terminationType,
   });
 }
 
@@ -363,8 +365,12 @@ final _evalSummaryProvider = FutureProvider<_EvalSummary>((ref) async {
         progress: live.progress, hasStarted: true, isComplete: false);
   }
   if (live is EvaluationComplete) {
-    return const _EvalSummary(
-        progress: 1.0, hasStarted: true, isComplete: true);
+    return _EvalSummary(
+      progress: 1.0,
+      hasStarted: true,
+      isComplete: true,
+      terminationType: live.session.terminationType,
+    );
   }
   final stored = await ref.read(evaluationLocalDatasourceProvider).load();
   if (stored == null) {
@@ -372,8 +378,12 @@ final _evalSummaryProvider = FutureProvider<_EvalSummary>((ref) async {
         progress: 0.0, hasStarted: false, isComplete: false);
   }
   if (stored.isComplete) {
-    return const _EvalSummary(
-        progress: 1.0, hasStarted: true, isComplete: true);
+    return _EvalSummary(
+      progress: 1.0,
+      hasStarted: true,
+      isComplete: true,
+      terminationType: stored.terminationType,
+    );
   }
   final answered = stored.answers.length;
   final total = stored.questionHistory.isNotEmpty
@@ -431,6 +441,7 @@ class _HeroEvaluationCardState extends ConsumerState<_HeroEvaluationCard>
     final summary = summaryAsync.valueOrNull ??
         const _EvalSummary(progress: 0.0, hasStarted: false, isComplete: false);
 
+    final isUrgent = summary.terminationType == 'urgent_referral';
     final pct = (summary.progress * 100).round();
     final statusLabel = summary.isComplete
         ? 'Évaluation terminée ✓'
@@ -501,7 +512,9 @@ class _HeroEvaluationCardState extends ConsumerState<_HeroEvaluationCard>
                           ),
                           child: Icon(
                             summary.isComplete
-                                ? Icons.check_circle_outline_rounded
+                                ? (summary.terminationType == 'urgent_referral'
+                                    ? Icons.warning_amber_rounded
+                                    : Icons.check_circle_outline_rounded)
                                 : Icons.health_and_safety_outlined,
                             color: Colors.white,
                             size: 26,
@@ -580,6 +593,65 @@ class _HeroEvaluationCardState extends ConsumerState<_HeroEvaluationCard>
                   const SizedBox(height: 16),
                   if (widget.gateRequired)
                     const _LockedCta()
+                  else if (summary.terminationType == 'urgent_referral')
+                    Column(
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () => context
+                                .pushNamed(RouteNames.beneficiaryDepistage),
+                            icon: const Icon(
+                              Icons.location_on_outlined,
+                              size: 20,
+                            ),
+                            label: const Text('Trouver un site de depistage'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: AppColors.accent,
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 13),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              elevation: 0,
+                              textStyle: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () => context
+                                .pushNamed(RouteNames.beneficiaryConseiller),
+                            icon: const Icon(
+                              Icons.support_agent_outlined,
+                              size: 20,
+                            ),
+                            label: const Text('Parler a un conseiller'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              side: BorderSide(
+                                color: Colors.white.withValues(alpha: 0.7),
+                              ),
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 13),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              textStyle: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
                   else if (summary.isComplete)
                     _EvalDoneCta()
                   else

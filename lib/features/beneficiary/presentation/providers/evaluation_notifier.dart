@@ -131,7 +131,11 @@ class EvaluationNotifier extends Notifier<EvaluationState> {
       if (e.errorCode == 'ALREADY_COMPLETED') {
         // Évaluation déjà terminée → afficher l'écran de fin
         state = const EvaluationComplete(
-          session: EvaluationSession(sessionId: ''),
+          session: EvaluationSession(
+            sessionId: '',
+            isComplete: true,
+            status: 'completed',
+          ),
           messages: [],
           completionMessage: 'Votre évaluation est déjà complétée.',
         );
@@ -224,7 +228,7 @@ class EvaluationNotifier extends Notifier<EvaluationState> {
         final completionMsg = _makeBotMessage(
           result.completionMessage ?? 'Merci ! Votre évaluation est terminée.',
         );
-        final updatedSession = current.session.copyWith(
+        final updatedSession = result.session.copyWith(
           isComplete: true,
           completionMessage: result.completionMessage,
         );
@@ -248,7 +252,7 @@ class EvaluationNotifier extends Notifier<EvaluationState> {
         final newHistory = [...active.questionHistory, next];
 
         final newActive = EvaluationActive(
-          session: current.session,
+          session: result.session,
           messages: [...msgs, botMsg],
           answers: newAnswers,
           questionHistory: newHistory,
@@ -351,6 +355,9 @@ class EvaluationNotifier extends Notifier<EvaluationState> {
       isComplete: false,
       sessionId: active.session.sessionId,
       sessionInternalId: active.session.sessionInternalId,
+      sessionStatus: active.session.status,
+      terminationType: active.session.terminationType,
+      terminationReason: active.session.terminationReason,
     ));
   }
 
@@ -371,7 +378,9 @@ class EvaluationNotifier extends Notifier<EvaluationState> {
       sessionId: session.sessionId,
       sessionInternalId: session.sessionInternalId,
       completionMessage: completionMessage,
-      sessionStatus: 'completed',
+      sessionStatus: session.status,
+      terminationType: session.terminationType,
+      terminationReason: session.terminationReason,
     ));
   }
 }

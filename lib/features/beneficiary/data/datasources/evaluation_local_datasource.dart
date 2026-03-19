@@ -14,8 +14,8 @@ final evaluationLocalDatasourceProvider =
 
 /// Persistance de la session d'évaluation en cours (équivalent localStorage).
 class EvaluationLocalDatasource {
-  static const _key = 'evaluation_flow_v5';
-  static const currentVersion = 5;
+  static const _key = 'evaluation_flow_v6';
+  static const currentVersion = 6;
 
   Future<StoredFlowState?> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -57,6 +57,8 @@ class StoredFlowState {
   final String? sessionInternalId;
   final String? completionMessage;
   final String? sessionStatus;
+  final String? terminationType;
+  final String? terminationReason;
 
   const StoredFlowState({
     required this.version,
@@ -68,6 +70,8 @@ class StoredFlowState {
     this.sessionInternalId,
     this.completionMessage,
     this.sessionStatus,
+    this.terminationType,
+    this.terminationReason,
   });
 
   bool get isValid => version == EvaluationLocalDatasource.currentVersion;
@@ -89,6 +93,8 @@ class StoredFlowState {
         sessionInternalId: json['session_internal_id'] as String?,
         completionMessage: json['completion_message'] as String?,
         sessionStatus: json['session_status'] as String?,
+        terminationType: json['termination_type'] as String?,
+        terminationReason: json['termination_reason'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -102,5 +108,7 @@ class StoredFlowState {
           'session_internal_id': sessionInternalId,
         if (completionMessage != null) 'completion_message': completionMessage,
         if (sessionStatus != null) 'session_status': sessionStatus,
+        if (terminationType != null) 'termination_type': terminationType,
+        if (terminationReason != null) 'termination_reason': terminationReason,
       };
 }

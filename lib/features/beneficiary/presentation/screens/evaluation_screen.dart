@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/responsive/app_responsive.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../domain/entities/evaluation_session.dart';
 import '../providers/evaluation_notifier.dart';
 import '../providers/evaluation_state.dart';
 import '../widgets/chat_input_bar.dart';
@@ -22,6 +23,29 @@ class EvaluationScreen extends ConsumerStatefulWidget {
 }
 
 class _EvaluationScreenState extends ConsumerState<EvaluationScreen> {
+  void _handleClose(BuildContext context, EvaluationState state) {
+    if (widget.subjectId != null) {
+      context.goNamed(RouteNames.fieldAgentHome);
+      return;
+    }
+
+    switch (state) {
+      case EvaluationComplete(:final session):
+        if (session.terminationType == 'consent_declined') {
+          context.goNamed(RouteNames.beneficiaryIntro);
+          return;
+        }
+        context.goNamed(RouteNames.beneficiaryHome);
+        return;
+      case EvaluationActive():
+        context.goNamed(RouteNames.beneficiaryHome);
+        return;
+      default:
+        context.goNamed(RouteNames.beneficiaryIntro);
+        return;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -39,6 +63,10 @@ class _EvaluationScreenState extends ConsumerState<EvaluationScreen> {
     // Redirection automatique en fin d'évaluation
     ref.listen<EvaluationState>(evaluationNotifierProvider, (_, next) {
       if (next is EvaluationComplete && mounted) {
+        if (next.session.terminationType == 'urgent_referral') {
+          return;
+        }
+
         Future.delayed(const Duration(seconds: 2), () {
           if (mounted && context.mounted) {
             if (widget.subjectId != null) {
@@ -90,7 +118,7 @@ class _EvaluationScreenState extends ConsumerState<EvaluationScreen> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.close),
-          onPressed: () => context.goNamed(RouteNames.beneficiaryIntro),
+          onPressed: () => _handleClose(context, state),
         ),
         title: const Text('Évaluation'),
         centerTitle: true,
@@ -228,6 +256,8 @@ class _CompleteViewState extends State<_CompleteView>
 
   @override
   Widget build(BuildContext context) {
+    final presentation = _CompletionPresentation.fromSession(widget.complete.session);
+
     return Column(
       children: [
         Expanded(
@@ -255,20 +285,29 @@ class _CompleteViewState extends State<_CompleteView>
                     width: 72,
                     height: 72,
                     decoration: BoxDecoration(
-                      color: AppColors.support.withValues(alpha: 0.12),
+                      color: presentation.accent.withValues(alpha: 0.12),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
-                      Icons.check_circle_rounded,
+                    child: Icon(
+                      presentation.icon,
                       size: 44,
-                      color: AppColors.support,
+                      color: presentation.accent,
                     ),
                   ),
                 ),
                 const SizedBox(height: 14),
                 Text(
+                  presentation.title,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: AppColors.foreground,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Text(
                   widget.complete.completionMessage ??
-                      'Votre évaluation est terminée. Merci !',
+                      presentation.fallbackMessage,
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         color: AppColors.foreground,
@@ -277,17 +316,101 @@ class _CompleteViewState extends State<_CompleteView>
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Redirection en cours…',
+                  presentation.redirectLabel,
                   style: Theme.of(context)
                       .textTheme
                       .bodySmall
                       ?.copyWith(color: AppColors.muted),
                 ),
+                if (presentation.showActions) ...[
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () =>
+                          context.pushNamed(RouteNames.beneficiaryDepistage),
+                      icon: const Icon(Icons.location_on_outlined, size: 18),
+                      label: const Text('Trouver un site de dépistage'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.accent,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () =>
+                          context.pushNamed(RouteNames.beneficiaryConseiller),
+                      icon: const Icon(Icons.support_agent_outlined, size: 18),
+                      label: const Text('Parler à un conseiller'),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextButton(
+                    onPressed: () => context.goNamed(
+                      widget.complete.session.status == 'cancelled' &&
+                              widget.complete.session.terminationType == null
+                          ? RouteNames.beneficiaryIntro
+                          : RouteNames.beneficiaryHome,
+                    ),
+                    child: const Text('Retour à l’accueil'),
+                  ),
+                ],
               ],
             ),
           ),
         ),
       ],
     );
+  }
+}
+
+class _CompletionPresentation {
+  final IconData icon;
+  final Color accent;
+  final String title;
+  final String fallbackMessage;
+  final String redirectLabel;
+  final bool showActions;
+
+  const _CompletionPresentation({
+    required this.icon,
+    required this.accent,
+    required this.title,
+    required this.fallbackMessage,
+    required this.redirectLabel,
+    this.showActions = false,
+  });
+
+  factory _CompletionPresentation.fromSession(EvaluationSession session) {
+    return switch (session.terminationType) {
+      'urgent_referral' => const _CompletionPresentation(
+          icon: Icons.warning_amber_rounded,
+          accent: AppColors.accent,
+          title: 'Orientation urgente',
+          fallbackMessage:
+              'Des signes d’alerte ont été détectés. Une évaluation médicale rapide est recommandée.',
+          redirectLabel: 'Choisissez une action pour poursuivre votre prise en charge.',
+          showActions: true,
+        ),
+      'consent_declined' => const _CompletionPresentation(
+          icon: Icons.info_outline_rounded,
+          accent: AppColors.brand,
+          title: 'Évaluation arrêtée',
+          fallbackMessage:
+              'Vous avez choisi de ne pas poursuivre l’évaluation.',
+          redirectLabel: 'Redirection en cours…',
+        ),
+      _ => const _CompletionPresentation(
+          icon: Icons.check_circle_rounded,
+          accent: AppColors.support,
+          title: 'Évaluation terminée',
+          fallbackMessage: 'Votre évaluation est terminée. Merci !',
+          redirectLabel: 'Redirection en cours…',
+        ),
+    };
   }
 }

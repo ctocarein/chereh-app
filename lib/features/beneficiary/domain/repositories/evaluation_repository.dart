@@ -6,6 +6,7 @@ import '../entities/question.dart';
 typedef StartResult = ({EvaluationSession session, Question firstQuestion});
 
 typedef AdvanceResult = ({
+  EvaluationSession session,
   Question? nextQuestion,
   bool isComplete,
   String? completionMessage,

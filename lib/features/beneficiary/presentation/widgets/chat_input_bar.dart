@@ -90,7 +90,11 @@ class _ChatInputBarState extends State<ChatInputBar> {
             ],
           ),
           padding: EdgeInsets.fromLTRB(
-            context.rp.hPad, 16, context.rp.hPad, 28),
+            context.rp.hPad,
+            16,
+            context.rp.hPad,
+            16 + MediaQuery.viewPaddingOf(context).bottom,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,

@@ -6,6 +6,8 @@ class EvaluationSession {
 
   /// 'in_progress' | 'completed' | 'expired'
   final String? status;
+  final String? terminationType;
+  final String? terminationReason;
 
   const EvaluationSession({
     required this.sessionId,
@@ -13,6 +15,8 @@ class EvaluationSession {
     this.isComplete = false,
     this.completionMessage,
     this.status,
+    this.terminationType,
+    this.terminationReason,
   });
 
   EvaluationSession copyWith({
@@ -21,6 +25,8 @@ class EvaluationSession {
     bool? isComplete,
     String? completionMessage,
     String? status,
+    String? terminationType,
+    String? terminationReason,
   }) =>
       EvaluationSession(
         sessionId: sessionId ?? this.sessionId,
@@ -28,6 +34,8 @@ class EvaluationSession {
         isComplete: isComplete ?? this.isComplete,
         completionMessage: completionMessage ?? this.completionMessage,
         status: status ?? this.status,
+        terminationType: terminationType ?? this.terminationType,
+        terminationReason: terminationReason ?? this.terminationReason,
       );
 
   factory EvaluationSession.fromJson(Map<String, dynamic> json) =>
@@ -40,5 +48,7 @@ class EvaluationSession {
             json['status'] == 'completed',
         completionMessage: json['completion_message'] as String?,
         status: json['status'] as String?,
+        terminationType: json['termination_type'] as String?,
+        terminationReason: json['termination_reason'] as String?,
       );
 }

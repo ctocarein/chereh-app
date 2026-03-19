@@ -44,17 +44,22 @@ class _PinScreenState extends ConsumerState<PinScreen> {
   Future<void> _submit() async {
     final pin = _digits.join();
     setState(() { _loading = true; _error = null; });
-    await ref.read(authNotifierProvider.notifier).submitPin(
+    final authNotifier = ref.read(authNotifierProvider.notifier);
+    await authNotifier.submitPin(
           sessionToken: widget.sessionToken,
           pin: pin,
           hasPin: widget.hasPin,
         );
     if (!mounted) return;
+    if (!widget.hasPin) {
+      await authNotifier.logout();
+      return;
+    }
     final authAsync = ref.read(authNotifierProvider);
-    if (authAsync.hasError) {
+    if (widget.hasPin && authAsync.hasError) {
       setState(() {
         _digits.clear();
-        _error = widget.hasPin ? 'PIN incorrect. Réessayez.' : 'Erreur lors de la création du PIN.';
+        _error = 'PIN incorrect. Réessayez.';
         _loading = false;
       });
     }

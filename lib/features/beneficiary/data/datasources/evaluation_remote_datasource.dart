@@ -90,11 +90,13 @@ class EvaluationRemoteDatasource {
       );
       final data = res.data as Map<String, dynamic>;
       final sessionData = data['session'] as Map<String, dynamic>?;
+      final session = EvaluationSession.fromJson(sessionData ?? data);
       final sessionStatus = sessionData?['status'] as String?;
       final isComplete =
           sessionStatus == 'completed' || sessionStatus == 'cancelled';
       final questionData = data['question'] as Map<String, dynamic>?;
       return (
+        session: session,
         nextQuestion: !isComplete && questionData != null
             ? Question.fromJson(questionData)
             : null,
