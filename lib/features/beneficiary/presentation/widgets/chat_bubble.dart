@@ -186,26 +186,18 @@ class _EditChip extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        width: 28,
+        height: 28,
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           color: AppColors.brandSoft,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(999),
           border: Border.all(color: AppColors.brand.withValues(alpha: 0.3)),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: const [
-            Icon(Icons.edit_outlined, size: 13, color: AppColors.brand),
-            SizedBox(width: 4),
-            Text(
-              'Modifier',
-              style: TextStyle(
-                fontSize: 12,
-                color: AppColors.brand,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
+        child: const Icon(
+          Icons.restart_alt_rounded,
+          size: 16,
+          color: AppColors.brand,
         ),
       ),
     );

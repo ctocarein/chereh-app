@@ -69,7 +69,7 @@ class EvaluationNotifier extends Notifier<EvaluationState> {
 
             final active = EvaluationActive(
               session: current.session,
-              messages: messages,
+              messages: _withSingleEditableLatestUserMessage(messages),
               answers: stored.answers,
               questionHistory: history,
               currentQuestion: currentQ,
@@ -203,7 +203,11 @@ class EvaluationNotifier extends Notifier<EvaluationState> {
       );
 
       state = current.copyWith(
-        messages: [...current.messages, userMsg, typingMsg],
+        messages: _withSingleEditableLatestUserMessage([
+          ...current.messages,
+          userMsg,
+          typingMsg,
+        ]),
         answers: newAnswers,
         isTyping: true,
         isSubmitting: true,
@@ -253,7 +257,7 @@ class EvaluationNotifier extends Notifier<EvaluationState> {
 
         final newActive = EvaluationActive(
           session: result.session,
-          messages: [...msgs, botMsg],
+          messages: _withSingleEditableLatestUserMessage([...msgs, botMsg]),
           answers: newAnswers,
           questionHistory: newHistory,
           currentQuestion: next,
@@ -295,13 +299,16 @@ class EvaluationNotifier extends Notifier<EvaluationState> {
 
     // Messages : on garde (stepIndex * 2 + 1) — bot+user alternés
     final keepCount = min(stepIndex * 2 + 1, current.messages.length);
-    final newMessages = current.messages.sublist(0, keepCount);
+    final newMessages = _withSingleEditableLatestUserMessage(
+      current.messages.sublist(0, keepCount),
+    );
 
     state = current.copyWith(
       questionHistory: newHistory,
       answers: newAnswers,
       messages: newMessages,
       currentQuestion: newHistory.last,
+      progress: _computeProgress(newAnswers.length, newHistory.last.totalSteps),
       isTyping: false,
       isSubmitting: false,
     );
@@ -330,6 +337,44 @@ class EvaluationNotifier extends Notifier<EvaluationState> {
         interactive: stepIndex != null,
         relatedStepIndex: stepIndex,
       );
+
+  List<ChatMessage> _withSingleEditableLatestUserMessage(
+    List<ChatMessage> messages,
+  ) {
+    int latestUserMessageIndex = -1;
+    int userStepIndex = -1;
+    final stepIndices = List<int?>.filled(messages.length, null);
+
+    for (var i = 0; i < messages.length; i++) {
+      final message = messages[i];
+      if (message.role != ChatRole.user || message.isTyping) continue;
+
+      userStepIndex += 1;
+      stepIndices[i] = userStepIndex;
+      latestUserMessageIndex = i;
+    }
+
+    if (latestUserMessageIndex == -1) {
+      return messages;
+    }
+
+    return List<ChatMessage>.generate(messages.length, (index) {
+      final message = messages[index];
+      final stepIndex = stepIndices[index];
+
+      if (message.role != ChatRole.user || message.isTyping || stepIndex == null) {
+        if (!message.interactive && message.relatedStepIndex == null) {
+          return message;
+        }
+        return message.copyWith(interactive: false, relatedStepIndex: null);
+      }
+
+      return message.copyWith(
+        interactive: index == latestUserMessageIndex,
+        relatedStepIndex: stepIndex,
+      );
+    });
+  }
 
   /// Formate une valeur brute en texte lisible pour la bulle utilisateur.
   String _formatValue(dynamic value, Question question) {
