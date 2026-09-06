@@ -1,9 +1,11 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/api/api_exception.dart';
+import '../../../../core/api/idempotency.dart';
 import '../../../../core/auth/auth_notifier.dart';
 import '../../../../core/auth/auth_state.dart';
 import '../../../../core/services/beneficiary_preference.dart';
@@ -27,6 +29,41 @@ class EvaluationNotifier extends Notifier<EvaluationState> {
   /// Vrai quand l'évaluateur ouvre une évaluation pour une personne pas encore
   /// enregistrée : le serveur crée la fiche au démarrage.
   bool _newSubject = false;
+
+  /// Clés d'idempotence, une par réponse distincte.
+  ///
+  /// Renvoyer deux fois la même réponse — parce que la confirmation s'est
+  /// perdue sur un réseau instable — doit être sans effet, pas créer un
+  /// doublon. La clé est donc attachée au contenu de la réponse : elle est
+  /// réutilisée à l'identique lors d'un renvoi, et renouvelée dès que la
+  /// réponse change, sans quoi l'API refuserait en 409.
+  final Map<String, String> _idempotencyKeys = {};
+
+  String _idempotencyKeyFor({
+    required String sessionId,
+    required String questionId,
+    required dynamic value,
+    required bool isSkipped,
+  }) {
+    // Encoder plutôt que convertir en texte : 5 et « 5 » sont deux charges
+    // distinctes, et les confondre enverrait la même clé avec un corps
+    // différent — que l'API refuse en 409.
+    String encoded;
+    try {
+      encoded = jsonEncode(value);
+    } catch (_) {
+      encoded = '${value.runtimeType}:$value';
+    }
+
+    final signature = jsonEncode({
+      'session': sessionId,
+      'question': questionId,
+      'value': encoded,
+      'skipped': isSkipped,
+    });
+
+    return _idempotencyKeys[signature] ??= generateIdempotencyKey();
+  }
 
   @override
   EvaluationState build() => const EvaluationIdle();
@@ -310,6 +347,12 @@ class EvaluationNotifier extends Notifier<EvaluationState> {
         questionId: current.currentQuestion.id,
         value: isSkipped ? null : payload,
         isSkipped: isSkipped,
+        idempotencyKey: _idempotencyKeyFor(
+          sessionId: current.session.sessionId,
+          questionId: current.currentQuestion.id,
+          value: isSkipped ? null : payload,
+          isSkipped: isSkipped,
+        ),
       );
 
       final active = state as EvaluationActive;

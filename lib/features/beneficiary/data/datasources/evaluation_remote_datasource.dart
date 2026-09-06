@@ -174,11 +174,16 @@ class EvaluationRemoteDatasource {
   }
 
   /// POST /evaluations/{id}/advance
+  ///
+  /// [idempotencyKey] : rejouer la même réponse avec la même clé renvoie la
+  /// réponse déjà calculée au lieu de l'enregistrer une seconde fois. La clé
+  /// doit changer si la réponse change, sinon l'API refuse en 409.
   Future<AdvanceResult> advance({
     required String sessionId,
     required String questionId,
     required dynamic value,
     bool isSkipped = false,
+    String? idempotencyKey,
   }) async {
     try {
       final res = await _dio.post(
@@ -188,6 +193,9 @@ class EvaluationRemoteDatasource {
           if (!isSkipped) 'value': value,
           if (isSkipped) 'is_skipped': true,
         },
+        options: Options(
+          headers: {'Idempotency-Key': ?idempotencyKey},
+        ),
       );
       final data = res.data as Map<String, dynamic>;
       final sessionData = data['session'] as Map<String, dynamic>?;
