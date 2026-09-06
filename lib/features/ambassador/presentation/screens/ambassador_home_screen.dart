@@ -16,6 +16,7 @@ import '../../../auth/presentation/screens/pin_screen.dart';
 import '../../../evaluator/domain/models/beneficiary_summary.dart';
 import '../../../evaluator/domain/models/evaluation_launch.dart';
 import '../../../evaluator/presentation/widgets/beneficiary_directory_view.dart';
+import '../../../evaluator/presentation/widgets/evaluator_impact_section.dart';
 
 // ============================================================================
 // Root scaffold with bottom navigation
@@ -252,40 +253,21 @@ class _AmbassadorHomeTabState
               ),
             ),
 
-            // ── Services ─────────────────────────────────────────────
+            // ── Mon impact ───────────────────────────────────────────
+            // Les services « trouver un dépistage » et « parler à un
+            // conseiller » s'adressent aux bénéficiaires. Dans l'espace de
+            // quelqu'un qui accompagne les autres, ce qui compte est ce
+            // qu'elle a accompli.
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-                child: const HomeSectionHeader(title: 'Services'),
+                child: const HomeSectionHeader(title: 'Mon impact'),
               ),
             ),
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                child: Column(
-                  children: [
-                    HomeActionTile(
-                      icon: Icons.location_on_outlined,
-                      iconColor: AppColors.accent,
-                      iconBg: AppColors.accentSoft,
-                      title: 'Dépistage de Proximité',
-                      subtitle: 'Trouver un site près de vous',
-                      onTap: () => context
-                          .pushNamed(RouteNames.ambassadorDepistage),
-                    ),
-                    const SizedBox(height: 10),
-                    HomeActionTile(
-                      icon: Icons.support_agent_outlined,
-                      iconColor: AppColors.support,
-                      iconBg: const Color(0xFFD4F5E5),
-                      title: 'Parler À Un Conseiller',
-                      subtitle: 'Consultation ou rendez-vous médical',
-                      badge: 'Premium',
-                      onTap: () => context
-                          .pushNamed(RouteNames.ambassadorConseiller),
-                    ),
-                  ],
-                ),
+                child: const EvaluatorImpactSection(),
               ),
             ),
 
