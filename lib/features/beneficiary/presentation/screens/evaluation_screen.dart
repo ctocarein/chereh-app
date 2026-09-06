@@ -1,7 +1,13 @@
+﻿import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/datasources/evaluation_remote_datasource.dart';
+
+import '../../../../core/auth/auth_notifier.dart';
+import '../../../../core/auth/auth_state.dart';
 import '../../../../core/responsive/app_responsive.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -13,10 +19,22 @@ import '../widgets/chat_message_list.dart';
 import '../widgets/evaluation_progress_bar.dart';
 
 class EvaluationScreen extends ConsumerStatefulWidget {
-  /// UUID du bénéficiaire ciblé — renseigné uniquement en mode évaluation assistée.
+  /// UUID de la bénéficiaire ciblée — renseigné en évaluation assistée.
   final String? subjectId;
 
-  const EvaluationScreen({super.key, this.subjectId});
+  /// Ouvre l'évaluation pour une personne pas encore enregistrée : sa fiche est
+  /// créée au démarrage, son numéro et sa commune sont demandés par le
+  /// questionnaire.
+  final bool newSubject;
+
+  const EvaluationScreen({
+    super.key,
+    this.subjectId,
+    this.newSubject = false,
+  });
+
+  /// Vrai quand l'évaluation est conduite pour un tiers.
+  bool get isAssisted => subjectId != null || newSubject;
 
   @override
   ConsumerState<EvaluationScreen> createState() => _EvaluationScreenState();
@@ -24,8 +42,16 @@ class EvaluationScreen extends ConsumerStatefulWidget {
 
 class _EvaluationScreenState extends ConsumerState<EvaluationScreen> {
   void _handleClose(BuildContext context, EvaluationState state) {
-    if (widget.subjectId != null) {
-      context.goNamed(RouteNames.fieldAgentHome);
+    // En évaluation assistée, on rend l'évaluateur à SON espace : renvoyer un
+    // ambassadeur vers l'accueil de l'agent de terrain le sortirait du sien.
+    if (widget.isAssisted) {
+      final auth = ref.read(authNotifierProvider).valueOrNull;
+      final role = auth is AuthStateAuthenticated ? auth.user.role : null;
+      context.goNamed(
+        role == UserRole.ambassador
+            ? RouteNames.ambassadorHome
+            : RouteNames.fieldAgentHome,
+      );
       return;
     }
 
@@ -51,8 +77,13 @@ class _EvaluationScreenState extends ConsumerState<EvaluationScreen> {
     super.initState();
     // Initialisation au prochain frame pour éviter les mutations d'état pendant le build
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(evaluationNotifierProvider.notifier)
-          .initialize(subjectId: widget.subjectId);
+      final current = ref.read(evaluationNotifierProvider);
+      if (current is EvaluationIdle) {
+        ref.read(evaluationNotifierProvider.notifier).initialize(
+              subjectId: widget.subjectId,
+              newSubject: widget.newSubject,
+            );
+      }
     });
   }
 
@@ -63,7 +94,11 @@ class _EvaluationScreenState extends ConsumerState<EvaluationScreen> {
     // Redirection automatique en fin d'évaluation
     ref.listen<EvaluationState>(evaluationNotifierProvider, (_, next) {
       if (next is EvaluationComplete && mounted) {
-        if (next.session.terminationType == 'urgent_referral') {
+        final termType = next.session.terminationType;
+        if (termType != null && termType.startsWith('urgent_')) {
+          return;
+        }
+        if (termType == 'already_completed') {
           return;
         }
 
@@ -120,7 +155,11 @@ class _EvaluationScreenState extends ConsumerState<EvaluationScreen> {
           icon: const Icon(Icons.close),
           onPressed: () => _handleClose(context, state),
         ),
-        title: const Text('Évaluation'),
+        title: Text(switch (state) {
+          EvaluationActive(:final blocLabel) when blocLabel != null => blocLabel,
+          EvaluationComplete(:final blocLabel) when blocLabel != null => blocLabel,
+          _ => 'Évaluation',
+        }),
         centerTitle: true,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(4),
@@ -146,7 +185,7 @@ class _LoadingView extends StatelessWidget {
         children: [
           CircularProgressIndicator(color: AppColors.brand),
           SizedBox(height: 16),
-          Text('Préparation de l\'évaluation…'),
+          Text('Préparation de l\'évaluation...'),
         ],
       ),
     );
@@ -220,19 +259,72 @@ class _ActiveView extends ConsumerWidget {
   }
 }
 
-class _CompleteView extends StatefulWidget {
+class _CompleteView extends ConsumerStatefulWidget {
   final EvaluationComplete complete;
   const _CompleteView({required this.complete});
 
   @override
-  State<_CompleteView> createState() => _CompleteViewState();
+  ConsumerState<_CompleteView> createState() => _CompleteViewState();
 }
 
-class _CompleteViewState extends State<_CompleteView>
+
+/// Sélectionne jusqu'à 3 suggestions pertinentes selon l'intention du thème terminé.
+List<ThematicBlocDto> _pickSuggestions(
+    List<ThematicBlocDto> blocs, EvaluationComplete complete) {
+  // Intentions prioritaires selon ce qui vient d'être fait
+  final preferred = switch (complete.blocIntention) {
+    ThematicIntention.assessment || ThematicIntention.screening => [
+        ThematicIntention.education,
+        ThematicIntention.monitoring,
+        ThematicIntention.followUp,
+      ],
+    ThematicIntention.education => [
+        ThematicIntention.assessment,
+        ThematicIntention.screening,
+        ThematicIntention.sharedDecision,
+      ],
+    ThematicIntention.monitoring || ThematicIntention.followUp => [
+        ThematicIntention.education,
+        ThematicIntention.preparation,
+      ],
+    ThematicIntention.preparation => [
+        ThematicIntention.assessment,
+        ThematicIntention.screening,
+      ],
+    _ when complete.session.terminationType == 'urgent_referral' => [
+        ThematicIntention.education,
+        ThematicIntention.monitoring,
+      ],
+    _ => [
+        ThematicIntention.education,
+        ThematicIntention.screening,
+        ThematicIntention.monitoring,
+      ],
+  };
+
+  // Exclure le thème qu'on vient de terminer
+  final pool = blocs.where((b) => b.key != complete.blocKey).toList();
+
+  final prioritized = pool
+      .where((b) => preferred.contains(b.intention))
+      .toList()
+    ..sort((a, b) => b.priority.compareTo(a.priority));
+
+  if (prioritized.length >= 3) return prioritized.take(3).toList();
+
+  final others = List<ThematicBlocDto>.from(
+      pool.where((b) => !preferred.contains(b.intention)))
+    ..shuffle(Random());
+
+  return [...prioritized, ...others].take(3).toList();
+}
+
+class _CompleteViewState extends ConsumerState<_CompleteView>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
   late final Animation<double> _scale;
   late final Animation<double> _fade;
+  List<ThematicBlocDto>? _pickedBlocs;
 
   @override
   void initState() {
@@ -246,6 +338,12 @@ class _CompleteViewState extends State<_CompleteView>
     );
     _fade = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
     _ctrl.forward();
+
+    ref.read(thematicBlocsProvider.future).then((blocs) {
+      if (mounted && _pickedBlocs == null && blocs.isNotEmpty) {
+        setState(() => _pickedBlocs = _pickSuggestions(blocs, widget.complete));
+      }
+    }).ignore();
   }
 
   @override
@@ -322,6 +420,53 @@ class _CompleteViewState extends State<_CompleteView>
                       .bodySmall
                       ?.copyWith(color: AppColors.muted),
                 ),
+                if (!presentation.showActions &&
+                    widget.complete.session.terminationType !=
+                        'consent_declined' &&
+                    _pickedBlocs != null &&
+                    _pickedBlocs!.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Explorer un autre sujet',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: AppColors.muted,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.4,
+                          ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: (_pickedBlocs ?? []).map((bloc) {
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ActionChip(
+                            avatar: Icon(bloc.iconData,
+                                size: 16, color: AppColors.brand),
+                            label: Text(bloc.title),
+                            onPressed: () => ref
+                                .read(evaluationNotifierProvider.notifier)
+                                .startThematic(bloc.key),
+                            backgroundColor: AppColors.brandSoft,
+                            labelStyle: const TextStyle(
+                              color: AppColors.brandStrong,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 13,
+                            ),
+                            side: BorderSide.none,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 6),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 if (presentation.showActions) ...[
                   const SizedBox(height: 18),
                   SizedBox(
@@ -356,7 +501,7 @@ class _CompleteViewState extends State<_CompleteView>
                           ? RouteNames.beneficiaryIntro
                           : RouteNames.beneficiaryHome,
                     ),
-                    child: const Text('Retour à l’accueil'),
+                    child: const Text("Retour à l'accueil"),
                   ),
                 ],
               ],
@@ -386,30 +531,42 @@ class _CompletionPresentation {
   });
 
   factory _CompletionPresentation.fromSession(EvaluationSession session) {
-    return switch (session.terminationType) {
-      'urgent_referral' => const _CompletionPresentation(
-          icon: Icons.warning_amber_rounded,
-          accent: AppColors.accent,
-          title: 'Orientation urgente',
-          fallbackMessage:
-              'Des signes d’alerte ont été détectés. Une évaluation médicale rapide est recommandée.',
-          redirectLabel: 'Choisissez une action pour poursuivre votre prise en charge.',
-          showActions: true,
-        ),
+    final type = session.terminationType;
+
+    if (type != null && type.startsWith('urgent_')) {
+      return const _CompletionPresentation(
+        icon: Icons.warning_amber_rounded,
+        accent: AppColors.accent,
+        title: 'Orientation urgente',
+        fallbackMessage:
+            'Des signes d\'alerte ont été détectés. Une évaluation médicale rapide est recommandée.',
+        redirectLabel: 'Choisissez une action pour poursuivre votre prise en charge.',
+        showActions: true,
+      );
+    }
+
+    return switch (type) {
       'consent_declined' => const _CompletionPresentation(
           icon: Icons.info_outline_rounded,
           accent: AppColors.brand,
           title: 'Évaluation arrêtée',
           fallbackMessage:
-              'Vous avez choisi de ne pas poursuivre l’évaluation.',
-          redirectLabel: 'Redirection en cours…',
+              'Vous avez choisi de ne pas poursuivre l\'évaluation.',
+          redirectLabel: 'Redirection en cours...',
+        ),
+      'already_completed' => const _CompletionPresentation(
+          icon: Icons.check_circle_rounded,
+          accent: AppColors.support,
+          title: 'Évaluation terminée',
+          fallbackMessage: 'Explorez un nouveau sujet ci-dessous.',
+          redirectLabel: '',
         ),
       _ => const _CompletionPresentation(
           icon: Icons.check_circle_rounded,
           accent: AppColors.support,
           title: 'Évaluation terminée',
           fallbackMessage: 'Votre évaluation est terminée. Merci !',
-          redirectLabel: 'Redirection en cours…',
+          redirectLabel: 'Redirection en cours...',
         ),
     };
   }

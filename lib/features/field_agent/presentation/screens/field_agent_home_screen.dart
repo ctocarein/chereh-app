@@ -15,6 +15,7 @@ import '../../../beneficiary/presentation/providers/evaluation_state.dart';
 import '../../domain/models/beneficiary_registration.dart';
 import '../providers/field_agent_notifier.dart';
 import '../../../evaluator/domain/models/beneficiary_summary.dart';
+import '../../../evaluator/domain/models/evaluation_launch.dart';
 import '../../../evaluator/presentation/providers/beneficiary_directory_notifier.dart';
 import '../../../evaluator/presentation/widgets/beneficiary_directory_view.dart';
 
@@ -873,9 +874,13 @@ class _PatientsTabState extends ConsumerState<_PatientsTab> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: BeneficiaryDirectoryView(
-        header: const _PatientsHeader(),
+        header: _PatientsHeader(
+          onStartNew: _startNewEvaluation,
+          onRegisterByPhone: _openRegisterSheet,
+        ),
         onSelect: _openEvaluation,
-        onCreate: _openRegisterSheet,
+        onCreate: _startNewEvaluation,
+        createLabel: 'Démarrer une évaluation',
       ),
     );
   }
@@ -886,7 +891,16 @@ class _PatientsTabState extends ConsumerState<_PatientsTab> {
   void _openEvaluation(BeneficiarySummary beneficiary) {
     context.goNamed(
       RouteNames.beneficiaryEvaluation,
-      extra: beneficiary.identityId,
+      extra: EvaluationLaunch.forSubject(beneficiary.identityId),
+    );
+  }
+
+  /// Ouvre une évaluation pour une personne pas encore enregistrée. Sa fiche
+  /// naît du parcours : le questionnaire demande son numéro, puis sa commune.
+  void _startNewEvaluation() {
+    context.goNamed(
+      RouteNames.beneficiaryEvaluation,
+      extra: const EvaluationLaunch.forNewBeneficiary(),
     );
   }
 
@@ -912,7 +926,13 @@ class _PatientsTabState extends ConsumerState<_PatientsTab> {
 
 /// En-tête de l'onglet, glissé au-dessus de la barre de recherche de l'annuaire.
 class _PatientsHeader extends StatelessWidget {
-  const _PatientsHeader();
+  final VoidCallback onStartNew;
+  final VoidCallback onRegisterByPhone;
+
+  const _PatientsHeader({
+    required this.onStartNew,
+    required this.onRegisterByPhone,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -930,8 +950,32 @@ class _PatientsHeader extends StatelessWidget {
             ),
           ),
           Text(
-            'Retrouvez une bénéficiaire ou enregistrez-en une nouvelle',
+            'Retrouvez une bénéficiaire ou ouvrez une nouvelle évaluation',
             style: theme.textTheme.bodySmall?.copyWith(color: AppColors.muted),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: onStartNew,
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text('Démarrer une évaluation'),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 13),
+              ),
+            ),
+          ),
+          // L'enrôlement par téléphone reste utile pour préparer une fiche hors
+          // visite, ou après un scan de QR. Secondaire : le cas courant est
+          // d'ouvrir directement l'évaluation.
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: onRegisterByPhone,
+              icon: const Icon(Icons.phone_outlined, size: 16),
+              label: const Text('Enregistrer par téléphone'),
+              style: TextButton.styleFrom(foregroundColor: AppColors.muted),
+            ),
           ),
         ],
       ),

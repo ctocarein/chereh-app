@@ -25,6 +25,7 @@ import '../../features/field_agent/presentation/screens/field_agent_home_screen.
 import '../../features/field_agent/presentation/screens/field_agent_qr_screen.dart';
 import '../../features/field_agent/presentation/screens/field_agent_assisted_eval_screen.dart';
 import '../../features/ambassador/presentation/screens/ambassador_home_screen.dart';
+import '../../features/evaluator/domain/models/evaluation_launch.dart';
 import 'route_names.dart';
 
 part 'app_router.g.dart';
@@ -179,9 +180,13 @@ GoRouter appRouter(Ref ref) {
       GoRoute(
         path: RouteNames.beneficiaryEvaluation,
         name: RouteNames.beneficiaryEvaluation,
-        builder: (context, routeState) => EvaluationScreen(
-          subjectId: routeState.extra as String?,
-        ),
+        builder: (context, routeState) {
+          final launch = EvaluationLaunch.fromExtra(routeState.extra);
+          return EvaluationScreen(
+            subjectId: launch.subjectId,
+            newSubject: launch.newSubject,
+          );
+        },
       ),
       GoRoute(
         path: RouteNames.beneficiaryHome,

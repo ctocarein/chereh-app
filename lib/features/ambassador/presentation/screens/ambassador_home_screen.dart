@@ -14,6 +14,7 @@ import '../../../beneficiary/presentation/providers/evaluation_state.dart';
 import '../../../beneficiary/presentation/screens/reports_tab_screen.dart';
 import '../../../auth/presentation/screens/pin_screen.dart';
 import '../../../evaluator/domain/models/beneficiary_summary.dart';
+import '../../../evaluator/domain/models/evaluation_launch.dart';
 import '../../../evaluator/presentation/widgets/beneficiary_directory_view.dart';
 
 // ============================================================================
@@ -912,8 +913,12 @@ class _AmbBeneficiariesTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return SafeArea(
       child: BeneficiaryDirectoryView(
-        header: const _AmbBeneficiariesHeader(),
+        header: _AmbBeneficiariesHeader(
+          onStartNew: () => _startNewEvaluation(context),
+        ),
         onSelect: (beneficiary) => _openEvaluation(context, beneficiary),
+        onCreate: () => _startNewEvaluation(context),
+        createLabel: 'Démarrer une évaluation',
       ),
     );
   }
@@ -923,13 +928,24 @@ class _AmbBeneficiariesTab extends StatelessWidget {
   void _openEvaluation(BuildContext context, BeneficiarySummary beneficiary) {
     context.goNamed(
       RouteNames.beneficiaryEvaluation,
-      extra: beneficiary.identityId,
+      extra: EvaluationLaunch.forSubject(beneficiary.identityId),
+    );
+  }
+
+  /// Ouvre une évaluation pour une personne pas encore enregistrée. Sa fiche
+  /// naît du parcours : le questionnaire demande son numéro, puis sa commune.
+  void _startNewEvaluation(BuildContext context) {
+    context.goNamed(
+      RouteNames.beneficiaryEvaluation,
+      extra: const EvaluationLaunch.forNewBeneficiary(),
     );
   }
 }
 
 class _AmbBeneficiariesHeader extends StatelessWidget {
-  const _AmbBeneficiariesHeader();
+  final VoidCallback onStartNew;
+
+  const _AmbBeneficiariesHeader({required this.onStartNew});
 
   @override
   Widget build(BuildContext context) {
@@ -949,6 +965,18 @@ class _AmbBeneficiariesHeader extends StatelessWidget {
           Text(
             'Ouvrez une évaluation ou reprenez une visite',
             style: theme.textTheme.bodySmall?.copyWith(color: AppColors.muted),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: onStartNew,
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text('Démarrer une évaluation'),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 13),
+              ),
+            ),
           ),
         ],
       ),

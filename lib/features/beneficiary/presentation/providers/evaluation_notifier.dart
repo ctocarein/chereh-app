@@ -21,8 +21,12 @@ final evaluationNotifierProvider =
 );
 
 class EvaluationNotifier extends Notifier<EvaluationState> {
-  /// Renseigné uniquement pour une évaluation assistée (FieldAgent → Bénéficiaire).
+  /// Renseigné uniquement pour une évaluation assistée (évaluateur → bénéficiaire).
   String? _subjectId;
+
+  /// Vrai quand l'évaluateur ouvre une évaluation pour une personne pas encore
+  /// enregistrée : le serveur crée la fiche au démarrage.
+  bool _newSubject = false;
 
   @override
   EvaluationState build() => const EvaluationIdle();
@@ -32,14 +36,17 @@ class EvaluationNotifier extends Notifier<EvaluationState> {
   // ---------------------------------------------------------------------------
 
   /// Point d'entrée : appelé au montage de [EvaluationScreen].
-  /// [subjectId] : UUID du bénéficiaire ciblé (éval. assistée par un FieldAgent).
-  Future<void> initialize({String? subjectId}) async {
+  /// [subjectId] : UUID de la bénéficiaire ciblée (évaluation assistée).
+  /// [newSubject] : ouvre une évaluation pour une personne pas encore enregistrée.
+  Future<void> initialize({String? subjectId, bool newSubject = false}) async {
     _subjectId = subjectId;
+    _newSubject = newSubject;
     state = const EvaluationLoading();
     try {
       final local = ref.read(evaluationLocalDatasourceProvider);
-      // En mode assisté, on ne reprend pas la session locale (elle appartient à l'agent)
-      final stored = subjectId != null ? null : await local.load();
+      // En mode assisté, on ne reprend pas la session locale : elle appartient
+      // à l'évaluateur, pas à la personne qu'il évalue.
+      final stored = (subjectId != null || newSubject) ? null : await local.load();
 
       // Tentative de reprise d'une session existante
       if (stored != null &&
@@ -92,10 +99,48 @@ class EvaluationNotifier extends Notifier<EvaluationState> {
     }
   }
 
+  /// Démarre une nouvelle évaluation thématique pour le bloc [blocKey].
+  /// [blocLabel] et [blocIntention] sont propagés dans l'état pour le titre et les suggestions.
+  /// Nettoie l'état local avant de démarrer.
+  Future<void> startThematic(
+    String blocKey, {
+    String? blocLabel,
+    ThematicIntention? blocIntention,
+  }) async {
+    state = const EvaluationLoading();
+    await ref.read(evaluationLocalDatasourceProvider).clear();
+    final remote = ref.read(evaluationRemoteDatasourceProvider);
+    try {
+      final result = await remote.start(type: 'thematic', blocKeys: [blocKey]);
+      await _markStarted();
+      final firstMsg = _makeBotMessage(result.firstQuestion.text);
+      final active = EvaluationActive(
+        session: result.session,
+        messages: [firstMsg],
+        answers: [],
+        questionHistory: [result.firstQuestion],
+        currentQuestion: result.firstQuestion,
+        progress: 0,
+        blocKey: blocKey,
+        blocLabel: blocLabel,
+        blocIntention: blocIntention,
+      );
+      state = active;
+      await _persist(active);
+    } on ApiException catch (e) {
+      state = EvaluationError(e.message);
+    } catch (e) {
+      state = EvaluationError(e.toString());
+    }
+  }
+
   Future<void> _startNew() async {
     final remote = ref.read(evaluationRemoteDatasourceProvider);
     try {
-      final result = await remote.start(subjectId: _subjectId);
+      final result = await remote.start(
+        subjectId: _subjectId,
+        newSubject: _newSubject,
+      );
       await _markStarted();
       final firstMsg = _makeBotMessage(result.firstQuestion.text);
       final active = EvaluationActive(
@@ -129,15 +174,16 @@ class EvaluationNotifier extends Notifier<EvaluationState> {
         }
       }
       if (e.errorCode == 'ALREADY_COMPLETED') {
-        // Évaluation déjà terminée → afficher l'écran de fin
+        // Évaluation déjà terminée → afficher les suggestions thématiques
         state = const EvaluationComplete(
           session: EvaluationSession(
             sessionId: '',
             isComplete: true,
             status: 'completed',
+            terminationType: 'already_completed',
           ),
           messages: [],
-          completionMessage: 'Votre évaluation est déjà complétée.',
+          completionMessage: 'Votre évaluation est terminée. Choisissez un sujet pour continuer la discussion.',
         );
         return;
       }
@@ -216,11 +262,13 @@ class EvaluationNotifier extends Notifier<EvaluationState> {
       // Appel API
       final remote = ref.read(evaluationRemoteDatasourceProvider);
       final isAck = current.currentQuestion.isAcknowledgement;
+      final isSkipped = isAck ||
+          (payload == null && current.currentQuestion.required == false);
       final result = await remote.advance(
         sessionId: current.session.sessionId,
         questionId: current.currentQuestion.id,
-        value: isAck ? null : payload,
-        isSkipped: isAck,
+        value: isSkipped ? null : payload,
+        isSkipped: isSkipped,
       );
 
       final active = state as EvaluationActive;
@@ -243,19 +291,35 @@ class EvaluationNotifier extends Notifier<EvaluationState> {
           answers: newAnswers,
           questionHistory: active.questionHistory,
           completionMessage: result.completionMessage,
+          blocKey: active.blocKey,
+          blocLabel: active.blocLabel,
         );
+
+        // Mémoriser le thème comme complété pour l'indicateur visuel
+        if (active.blocKey != null) {
+          final authState = ref.read(authNotifierProvider).valueOrNull;
+          if (authState is AuthStateAuthenticated) {
+            await BeneficiaryPreference.markThemeCompleted(
+              authState.user.id,
+              active.blocKey!,
+            );
+          }
+        }
 
         state = EvaluationComplete(
           session: updatedSession,
           messages: [...msgs, completionMsg],
           completionMessage: result.completionMessage,
+          blocKey: current.blocKey,
+          blocLabel: current.blocLabel,
+          blocIntention: current.blocIntention,
         );
       } else {
         final next = result.nextQuestion!;
         final botMsg = _makeBotMessage(next.text);
         final newHistory = [...active.questionHistory, next];
 
-        final newActive = EvaluationActive(
+        final newActive = active.copyWith(
           session: result.session,
           messages: _withSingleEditableLatestUserMessage([...msgs, botMsg]),
           answers: newAnswers,
@@ -379,8 +443,17 @@ class EvaluationNotifier extends Notifier<EvaluationState> {
   /// Formate une valeur brute en texte lisible pour la bulle utilisateur.
   String _formatValue(dynamic value, Question question) {
     if (value == null) return '–';
-    if (value is List) return value.join(', ');
+    if (question.isAcknowledgement) return 'Continuer';
+    if (value is List) {
+      return value
+          .map((v) => question.labelForValue(v.toString()))
+          .join(', ');
+    }
     if (value is bool) return value ? 'Oui' : 'Non';
+    if (question.type == QuestionType.selectOne ||
+        question.type == QuestionType.radio) {
+      return question.labelForValue(value.toString());
+    }
     if (question.type == QuestionType.rating) return '$value ★';
     return value.toString();
   }
@@ -403,6 +476,8 @@ class EvaluationNotifier extends Notifier<EvaluationState> {
       sessionStatus: active.session.status,
       terminationType: active.session.terminationType,
       terminationReason: active.session.terminationReason,
+      blocKey: active.blocKey,
+      blocLabel: active.blocLabel,
     ));
   }
 
@@ -412,6 +487,8 @@ class EvaluationNotifier extends Notifier<EvaluationState> {
     required List<Answer> answers,
     required List<Question> questionHistory,
     String? completionMessage,
+    String? blocKey,
+    String? blocLabel,
   }) async {
     final local = ref.read(evaluationLocalDatasourceProvider);
     await local.save(StoredFlowState(
@@ -426,6 +503,8 @@ class EvaluationNotifier extends Notifier<EvaluationState> {
       sessionStatus: session.status,
       terminationType: session.terminationType,
       terminationReason: session.terminationReason,
+      blocKey: blocKey,
+      blocLabel: blocLabel,
     ));
   }
 }

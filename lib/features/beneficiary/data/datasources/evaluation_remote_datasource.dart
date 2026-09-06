@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/api/api_client.dart';
@@ -14,16 +15,107 @@ final evaluationRemoteDatasourceProvider =
   return EvaluationRemoteDatasource(ref.watch(apiClientProvider));
 });
 
+// ---------------------------------------------------------------------------
+// Thematic blocs
+// ---------------------------------------------------------------------------
+
+enum ThematicIntention {
+  assessment,
+  screening,
+  monitoring,
+  preparation,
+  followUp,
+  education,
+  triage,
+  sharedDecision,
+  crisis;
+
+  static ThematicIntention fromString(String? value) => switch (value) {
+        'assessment'      => ThematicIntention.assessment,
+        'screening'       => ThematicIntention.screening,
+        'monitoring'      => ThematicIntention.monitoring,
+        'preparation'     => ThematicIntention.preparation,
+        'follow_up'       => ThematicIntention.followUp,
+        'education'       => ThematicIntention.education,
+        'triage'          => ThematicIntention.triage,
+        'shared_decision' => ThematicIntention.sharedDecision,
+        'crisis'          => ThematicIntention.crisis,
+        _                 => ThematicIntention.assessment,
+      };
+}
+
+class ThematicBlocDto {
+  final String key;
+  final String title;
+  final String? description;
+  final String? icon;
+  final String? color;
+  final ThematicIntention intention;
+  final int priority;
+
+  const ThematicBlocDto({
+    required this.key,
+    required this.title,
+    this.description,
+    this.icon,
+    this.color,
+    this.intention = ThematicIntention.assessment,
+    this.priority = 0,
+  });
+
+  factory ThematicBlocDto.fromJson(Map<String, dynamic> json) =>
+      ThematicBlocDto(
+        key:       json['key'] as String,
+        title:     json['title'] as String,
+        description: json['description'] as String?,
+        icon:      json['icon'] as String?,
+        color:     json['color'] as String?,
+        intention: ThematicIntention.fromString(json['intention'] as String?),
+        priority:  (json['priority'] as num?)?.toInt() ?? 0,
+      );
+
+  IconData get iconData => switch (icon) {
+        'water_drop'        => Icons.water_drop_outlined,
+        'favorite'          => Icons.favorite_border_rounded,
+        'medical_services'  => Icons.medical_services_outlined,
+        'calendar_month'    => Icons.calendar_month_outlined,
+        'self_improvement'  => Icons.self_improvement_outlined,
+        'vaccines'          => Icons.vaccines_outlined,
+        'monitor_heart'     => Icons.monitor_heart_outlined,
+        'nightlight'        => Icons.nightlight_outlined,
+        'psychology'        => Icons.psychology_outlined,
+        'health_and_safety' => Icons.health_and_safety_outlined,
+        'heart'             => Icons.favorite_border_rounded,
+        'shield'            => Icons.shield_outlined,
+        'user'              => Icons.person_outline_rounded,
+        'users'             => Icons.group_outlined,
+        'activity'          => Icons.show_chart_rounded,
+        'clipboard'         => Icons.assignment_outlined,
+        'calendar'          => Icons.calendar_month_outlined,
+        'search'            => Icons.search_rounded,
+        _                   => Icons.chat_bubble_outline_rounded,
+      };
+}
+
+final thematicBlocsProvider = FutureProvider<List<ThematicBlocDto>>((ref) {
+  return ref.read(evaluationRemoteDatasourceProvider).fetchThematicBlocs();
+});
+
 class EvaluationRemoteDatasource {
   final Dio _dio;
   EvaluationRemoteDatasource(this._dio);
 
   /// POST /evaluations/start
-  /// [subjectId] : UUID du bénéficiaire — uniquement pour un FieldAgent (éval. assistée)
+  ///
+  /// [subjectId] : UUID d'une bénéficiaire déjà enregistrée (évaluation assistée).
+  /// [newSubject] : crée la fiche en même temps que la session, pour quelqu'un
+  /// qui n'est pas encore enregistré. Son numéro et sa commune sont ensuite
+  /// collectés par le questionnaire. Les deux sont exclusifs.
   Future<StartResult> start({
     String type = 'complete',
     List<String>? blocKeys,
     String? subjectId,
+    bool newSubject = false,
   }) async {
     try {
       final res = await _dio.post(
@@ -32,6 +124,7 @@ class EvaluationRemoteDatasource {
           'type': type,
           'bloc_keys': ?blocKeys,
           'subject_id': ?subjectId,
+          if (newSubject) 'new_subject': true,
         },
       );
       return _parseStartResult(res.data as Map<String, dynamic>);
@@ -104,6 +197,20 @@ class EvaluationRemoteDatasource {
         completionMessage: data['message'] as String?,
         progress: (data['progress'] as num?)?.toDouble() ?? 0.0,
       );
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e);
+    }
+  }
+
+  /// GET /thematic-blocs
+  Future<List<ThematicBlocDto>> fetchThematicBlocs() async {
+    try {
+      final res = await _dio.get('/thematic-blocs');
+      final data = (res.data as Map<String, dynamic>)['data'] as List<dynamic>;
+      return data
+          .cast<Map<String, dynamic>>()
+          .map(ThematicBlocDto.fromJson)
+          .toList();
     } on DioException catch (e) {
       throw ApiException.fromDio(e);
     }
