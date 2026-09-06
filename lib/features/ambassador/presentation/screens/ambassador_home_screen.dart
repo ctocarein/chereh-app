@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -9,11 +8,13 @@ import '../../../../core/presentation/widgets/home_shared_widgets.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../beneficiary/data/datasources/evaluation_local_datasource.dart';
+import '../../../beneficiary/data/datasources/evaluation_remote_datasource.dart';
 import '../../../beneficiary/presentation/providers/evaluation_notifier.dart';
 import '../../../beneficiary/presentation/providers/evaluation_state.dart';
+import '../../../beneficiary/presentation/screens/reports_tab_screen.dart';
 import '../../../auth/presentation/screens/pin_screen.dart';
-import '../../domain/models/ambassador_models.dart';
-import '../providers/ambassador_notifier.dart';
+import '../../../evaluator/domain/models/beneficiary_summary.dart';
+import '../../../evaluator/presentation/widgets/beneficiary_directory_view.dart';
 
 // ============================================================================
 // Root scaffold with bottom navigation
@@ -39,17 +40,11 @@ class _AmbassadorHomeScreenState
         index: _tab,
         children: const [
           _AmbassadorHomeTab(),
-          _ReferralTab(),
-          PlaceholderTab(
-            icon: Icons.bar_chart_outlined,
-            title: 'Mes Rapports',
-            subtitle:
-                'Scores, niveaux de risque et recommandations — bientôt disponible',
-          ),
+          _AmbMonSuiviTab(),
+          _AmbBeneficiariesTab(),
+          ReportsTabScreen(),
           SharedProfileTab(
-            extraTiles: [
-              _AmbassadorProfileTile(),
-            ],
+            extraTiles: [_AmbassadorProfileTile()],
           ),
         ],
       ),
@@ -63,25 +58,32 @@ class _AmbassadorHomeScreenState
             onTap: () => setState(() => _tab = 0),
           ),
           HomeNavItem(
-            icon: Icons.group_outlined,
-            activeIcon: Icons.group_outlined,
-            label: 'Parrainage',
+            icon: Icons.favorite_border_rounded,
+            activeIcon: Icons.favorite_rounded,
+            label: 'Mon suivi',
             active: _tab == 1,
             onTap: () => setState(() => _tab = 1),
+          ),
+          HomeNavItem(
+            icon: Icons.group_outlined,
+            activeIcon: Icons.group_rounded,
+            label: 'Bénéficiaires',
+            active: _tab == 2,
+            onTap: () => setState(() => _tab = 2),
           ),
           HomeNavItem(
             icon: Icons.bar_chart_outlined,
             activeIcon: Icons.bar_chart_rounded,
             label: 'Rapports',
-            active: _tab == 2,
-            onTap: () => setState(() => _tab = 2),
+            active: _tab == 3,
+            onTap: () => setState(() => _tab = 3),
           ),
           HomeNavItem(
             icon: Icons.person_outline_rounded,
             activeIcon: Icons.person_rounded,
             label: 'Profil',
-            active: _tab == 3,
-            onTap: () => setState(() => _tab = 3),
+            active: _tab == 4,
+            onTap: () => setState(() => _tab = 4),
           ),
         ],
       ),
@@ -151,10 +153,6 @@ class _AmbassadorHomeTabState
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
     _ctrl.forward();
-    // Chargement des métriques dès l'ouverture du home tab
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(ambassadorNotifierProvider.notifier).load();
-    });
   }
 
   @override
@@ -174,12 +172,6 @@ class _AmbassadorHomeTabState
     final firstName = name.split(' ').first;
     final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
     final gateRequired = user?.gateRequired ?? false;
-
-    // Quick metrics from notifier (null if not loaded yet)
-    final ambassadorState = ref.watch(ambassadorNotifierProvider);
-    final metrics = ambassadorState is AmbassadorLoaded
-        ? ambassadorState.metrics
-        : null;
 
     return FadeTransition(
       opacity: _fade,
@@ -215,12 +207,11 @@ class _AmbassadorHomeTabState
                                       ),
                                 ),
                                 const SizedBox(width: 8),
-                                _RoleBadge(
-                                    label: metrics?.levelLabel ?? 'Ambassadeur'),
+                                const _RoleBadge(label: 'Ambassadeur'),
                               ],
                             ),
                             Text(
-                              'Partagez, impactez, grandissez',
+                              "Accompagnez les femmes de votre communauté",
                               style: Theme.of(context)
                                   .textTheme
                                   .bodySmall
@@ -236,7 +227,7 @@ class _AmbassadorHomeTabState
                         tooltip: 'Scanner un QR',
                       ),
                       const SizedBox(width: 8),
-                      const HomeNotificationButton(badge: 2),
+                      const HomeNotificationButton(badge: 0),
                     ],
                   ),
                 ),
@@ -339,111 +330,6 @@ class _RoleBadge extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-// ============================================================================
-// Stats strip (Total / Actifs / Inscrits)
-// ============================================================================
-
-class _StatsStrip extends StatelessWidget {
-  final AmbassadorMetrics metrics;
-  const _StatsStrip({required this.metrics});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-      decoration: BoxDecoration(
-        color: AppColors.brandSoft,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          _StatCell(
-              label: 'Total', value: '${metrics.totalReferrals}'),
-          _StatDivider(),
-          _StatCell(
-              label: 'Actifs',
-              value: '${metrics.activeReferrals}',
-              valueColor: AppColors.brand),
-          _StatDivider(),
-          _StatCell(
-              label: 'Inscrits',
-              value: '${metrics.completedUsages}',
-              valueColor: AppColors.support),
-          if (metrics.badgesEarned > 0) ...[
-            _StatDivider(),
-            _StatCell(
-                label: 'Badges',
-                value: '${metrics.badgesEarned}',
-                icon: Icons.military_tech_rounded,
-                valueColor: AppColors.warning),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _StatCell extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color? valueColor;
-  final IconData? icon;
-
-  const _StatCell({
-    required this.label,
-    required this.value,
-    this.valueColor,
-    this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
-        children: [
-          if (icon != null)
-            Icon(icon, size: 14, color: valueColor ?? AppColors.foreground)
-          else
-            Text(
-              value,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: valueColor ?? AppColors.foreground,
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-          if (icon != null)
-            Text(
-              value,
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: valueColor ?? AppColors.foreground,
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: Theme.of(context)
-                .textTheme
-                .labelSmall
-                ?.copyWith(color: AppColors.muted),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatDivider extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 1,
-      height: 32,
-      color: AppColors.brand.withValues(alpha: 0.15),
     );
   }
 }
@@ -690,7 +576,7 @@ class _AmbHeroEvalCardState extends ConsumerState<_AmbHeroEvalCard>
                   if (widget.gateRequired)
                     _AmbLockedCta(token: gateToken)
                   else if (summary.isComplete)
-                    _AmbEvalDoneCta()
+                    _AmbContinueDiscussionCta()
                   else
                     SizedBox(
                       width: double.infinity,
@@ -734,30 +620,28 @@ class _AmbHeroEvalCardState extends ConsumerState<_AmbHeroEvalCard>
   }
 }
 
-class _AmbEvalDoneCta extends StatelessWidget {
+class _AmbContinueDiscussionCta extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.check_circle_rounded,
-              color: Colors.white, size: 18),
-          const SizedBox(width: 8),
-          Text(
-            'Évaluation complétée',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
+      child: ElevatedButton.icon(
+        onPressed: () => context.goNamed(RouteNames.beneficiaryEvaluation),
+        icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+        label: const Text('Continuer la discussion'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: AppColors.brand,
+          padding: const EdgeInsets.symmetric(vertical: 13),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
           ),
-        ],
+          elevation: 0,
+          textStyle: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
+        ),
       ),
     );
   }
@@ -833,234 +717,122 @@ class _AmbPinSetupWrapper extends ConsumerWidget {
 }
 
 // ============================================================================
-// Tab 1 — Parrainage
+// Tab 1 — Mon suivi (thématiques)
 // ============================================================================
 
-class _ReferralTab extends ConsumerStatefulWidget {
-  const _ReferralTab();
+class _AmbMonSuiviTab extends ConsumerWidget {
+  const _AmbMonSuiviTab();
 
   @override
-  ConsumerState<_ReferralTab> createState() => _ReferralTabState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final blocsAsync = ref.watch(thematicBlocsProvider);
 
-class _ReferralTabState extends ConsumerState<_ReferralTab> {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(ambassadorNotifierProvider.notifier).load();
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final state = ref.watch(ambassadorNotifierProvider);
-
-    return SafeArea(
-      child: switch (state) {
-        AmbassadorLoading() => const Center(
-            child: CircularProgressIndicator(color: AppColors.brand),
-          ),
-        AmbassadorError(:final message) => _ErrorBody(
-            message: message,
-            onRetry: () =>
-                ref.read(ambassadorNotifierProvider.notifier).load(),
-          ),
-        AmbassadorLoaded() => _ReferralBody(
-            state: state,
-            onRevoke: (id) => ref
-                .read(ambassadorNotifierProvider.notifier)
-                .revokeReferral(id),
-            onRefresh: () =>
-                ref.read(ambassadorNotifierProvider.notifier).load(),
-          ),
-      },
-    );
-  }
-}
-
-// ============================================================================
-// Referral body (loaded state)
-// ============================================================================
-
-class _ReferralBody extends StatelessWidget {
-  final AmbassadorLoaded state;
-  final void Function(String id) onRevoke;
-  final Future<void> Function() onRefresh;
-
-  const _ReferralBody({
-    required this.state,
-    required this.onRevoke,
-    required this.onRefresh,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return RefreshIndicator(
-      color: AppColors.brand,
-      onRefresh: onRefresh,
-      child: CustomScrollView(
-        physics: const BouncingScrollPhysics(),
-        slivers: [
-          // ── Header ───────────────────────────────────────────────────
-          SliverToBoxAdapter(
+    return CustomScrollView(
+      physics: const BouncingScrollPhysics(),
+      slivers: [
+        SliverToBoxAdapter(
+          child: SafeArea(
+            bottom: false,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Parrainage',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleLarge
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                        Text(
-                          'Invitez vos contacts à rejoindre CheReh',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(color: AppColors.muted),
-                        ),
-                      ],
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+              child: Text(
+                'Mon suivi',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.foreground,
                     ),
-                  ),
-                  // Icône pour ouvrir le modal de génération
-                  Tooltip(
-                    message: 'Générer un lien',
-                    child: GestureDetector(
-                      onTap: () => showModalBottomSheet<void>(
-                        context: context,
-                        isScrollControlled: true,
-                        backgroundColor: Colors.transparent,
-                        builder: (_) => const _GenerateLinkModal(),
-                      ),
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: AppColors.brand,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          Icons.add_link_rounded,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
               ),
             ),
           ),
-
-          // ── Stats strip (Total / Actifs / Inscrits) ──────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              child: _StatsStrip(metrics: state.metrics),
-            ),
-          ),
-
-          // ── Level card ───────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-              child: _LevelCard(metrics: state.metrics),
-            ),
-          ),
-
-          // ── Referrals list ───────────────────────────────────────────
-          if (state.referrals.isNotEmpty) ...[
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-                child: HomeSectionHeader(
-                  title: 'Mes liens (${state.referrals.length})',
-                ),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-              sliver: SliverList.separated(
-                itemCount: state.referrals.length,
-                separatorBuilder: (context, index) =>
-                    const SizedBox(height: 8),
-                itemBuilder: (context, i) => _ReferralTile(
-                  referral: state.referrals[i],
-                  onRevoke: () => onRevoke(state.referrals[i].id),
-                ),
-              ),
-            ),
-          ],
-
-          const SliverToBoxAdapter(child: SizedBox(height: 36)),
-        ],
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// Level card
-// ============================================================================
-
-const _levelOrder = ['starter', 'bronze', 'silver', 'gold', 'platinum'];
-
-Color _levelColor(String code) => switch (code) {
-      'starter' => AppColors.muted,
-      'bronze' => const Color(0xFFCD7F32),
-      'silver' => const Color(0xFF8E9EAD),
-      'gold' => AppColors.warning,
-      'platinum' => AppColors.brand,
-      _ => AppColors.muted,
-    };
-
-class _LevelCard extends StatelessWidget {
-  final AmbassadorMetrics metrics;
-  const _LevelCard({required this.metrics});
-
-  @override
-  Widget build(BuildContext context) {
-    final idx = _levelOrder.indexOf(metrics.levelCode);
-    final progress = idx < 0 ? 0.0 : (idx + 1) / _levelOrder.length;
-    final nextLevel = idx >= 0 && idx < _levelOrder.length - 1
-        ? _levelOrder[idx + 1]
-        : null;
-    final color = _levelColor(metrics.levelCode);
-
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            color.withValues(alpha: 0.12),
-            color.withValues(alpha: 0.04),
-          ],
         ),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        children: [
-          Row(
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+            child: Text(
+              'Choisissez un sujet pour démarrer une discussion',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: AppColors.muted),
+            ),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+            child: blocsAsync.when(
+              loading: () => const Center(
+                child: Padding(
+                  padding: EdgeInsets.only(top: 48),
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+              error: (_, _) => Center(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 48),
+                  child: Text(
+                    'Impossible de charger les sujets',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: AppColors.muted),
+                  ),
+                ),
+              ),
+              data: (blocs) => Column(
+                children: blocs
+                    .map((bloc) => Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _AmbSuiviCard(bloc: bloc),
+                        ))
+                    .toList(),
+              ),
+            ),
+          ),
+        ),
+        const SliverToBoxAdapter(child: SizedBox(height: 32)),
+      ],
+    );
+  }
+}
+
+class _AmbSuiviCard extends ConsumerWidget {
+  final ThematicBlocDto bloc;
+  const _AmbSuiviCard({required this.bloc});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () {
+          ref
+              .read(evaluationNotifierProvider.notifier)
+              .startThematic(bloc.key);
+          context.goNamed(RouteNames.beneficiaryEvaluation);
+        },
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFF4F6F8), width: 1.5),
+          ),
+          child: Row(
             children: [
               Container(
-                width: 44,
-                height: 44,
+                width: 48,
+                height: 48,
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
+                  color: AppColors.brandSoft,
+                  borderRadius: BorderRadius.circular(13),
                 ),
-                child: Icon(Icons.workspace_premium_rounded,
-                    color: color, size: 24),
+                child: Icon(
+                  _ambIconFromString(bloc.icon),
+                  color: AppColors.brand,
+                  size: 24,
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -1068,581 +840,117 @@ class _LevelCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Niveau ${metrics.levelLabel}',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleSmall
-                          ?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: color,
+                      bloc.title,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.foreground,
                           ),
                     ),
-                    if (nextLevel != null)
+                    if (bloc.description != null) ...[
+                      const SizedBox(height: 3),
                       Text(
-                        'Prochain : ${_levelLabel(nextLevel)}',
+                        bloc.description!,
                         style: Theme.of(context)
                             .textTheme
                             .bodySmall
                             ?.copyWith(color: AppColors.muted),
-                      ),
-                  ],
-                ),
-              ),
-              if (metrics.badgesEarned > 0)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: AppColors.warning.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.military_tech_rounded,
-                          size: 14, color: AppColors.warning),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${metrics.badgesEarned}',
-                        style: const TextStyle(
-                          color: AppColors.warning,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 6,
-              backgroundColor: color.withValues(alpha: 0.12),
-              valueColor: AlwaysStoppedAnimation<Color>(color),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _StatPill(label: 'Liens créés',
-                  value: '${metrics.totalReferrals}'),
-              _StatPill(label: 'Actifs',
-                  value: '${metrics.activeReferrals}',
-                  highlight: true),
-              _StatPill(label: 'Inscrits',
-                  value: '${metrics.completedUsages}',
-                  highlight: true),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  static String _levelLabel(String code) => switch (code) {
-        'starter' => 'Débutant',
-        'bronze' => 'Bronze',
-        'silver' => 'Argent',
-        'gold' => 'Or',
-        'platinum' => 'Platine',
-        _ => code,
-      };
-}
-
-class _StatPill extends StatelessWidget {
-  final String label;
-  final String value;
-  final bool highlight;
-  const _StatPill(
-      {required this.label, required this.value, this.highlight = false});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: highlight ? AppColors.brand : AppColors.foreground,
-              ),
-        ),
-        Text(
-          label,
-          style: Theme.of(context)
-              .textTheme
-              .labelSmall
-              ?.copyWith(color: AppColors.muted),
-        ),
-      ],
-    );
-  }
-}
-
-// ============================================================================
-// Generate link — bottom sheet modal (ConsumerStatefulWidget)
-// ============================================================================
-
-class _GenerateLinkModal extends ConsumerStatefulWidget {
-  const _GenerateLinkModal();
-
-  @override
-  ConsumerState<_GenerateLinkModal> createState() => _GenerateLinkModalState();
-}
-
-class _GenerateLinkModalState extends ConsumerState<_GenerateLinkModal> {
-  String? _selectedChannel;
-
-  static const _channels = [
-    (value: 'whatsapp', label: 'WhatsApp', icon: Icons.chat_outlined),
-    (value: 'sms', label: 'SMS', icon: Icons.sms_outlined),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final state = ref.watch(ambassadorNotifierProvider);
-    final isGenerating =
-        state is AmbassadorLoaded ? state.isGenerating : false;
-    final generated =
-        state is AmbassadorLoaded ? state.lastGenerated : null;
-
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 20,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 28,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Handle
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.disabled,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // Titre
-          Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.brandSoft,
-                  borderRadius: BorderRadius.circular(11),
-                ),
-                child: const Icon(Icons.add_link_rounded,
-                    color: AppColors.brand, size: 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Générer un lien',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleSmall
-                          ?.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      'Partagez avec vos contacts',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: AppColors.muted),
-                    ),
                   ],
                 ),
               ),
-              if (generated?.remainingWeekly != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.brandSoft,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    '${generated!.remainingWeekly} restant${generated.remainingWeekly! > 1 ? 's' : ''}',
-                    style: const TextStyle(
-                      color: AppColors.brand,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
+              const SizedBox(width: 8),
+              const Icon(Icons.arrow_forward_ios_rounded,
+                  size: 14, color: AppColors.muted),
             ],
           ),
-          const SizedBox(height: 20),
-
-          // Channel selector
-          Row(
-            children: _channels.map((ch) {
-              final isSelected = _selectedChannel == ch.value;
-              return Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: GestureDetector(
-                    onTap: () =>
-                        setState(() => _selectedChannel = ch.value),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? AppColors.brandSoft
-                            : AppColors.surfaceAlt,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: isSelected
-                              ? AppColors.brand
-                              : Colors.transparent,
-                        ),
-                      ),
-                      child: Column(
-                        children: [
-                          Icon(
-                            ch.icon,
-                            size: 18,
-                            color: isSelected
-                                ? AppColors.brand
-                                : AppColors.muted,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            ch.label,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: isSelected
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                              color: isSelected
-                                  ? AppColors.brand
-                                  : AppColors.muted,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 16),
-
-          // Lien généré
-          if (generated != null) ...[
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceAlt,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                    color: AppColors.brand.withValues(alpha: 0.2)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.link_rounded,
-                      size: 16, color: AppColors.brand),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      generated.url,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: AppColors.foreground),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () {
-                      Clipboard.setData(
-                          ClipboardData(text: generated.url));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Lien copié !'),
-                          duration: Duration(seconds: 2),
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    },
-                    child: const Padding(
-                      padding: EdgeInsets.only(left: 8),
-                      child: Icon(Icons.copy_rounded,
-                          size: 16, color: AppColors.brand),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-          ],
-
-          // Boutons
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: isGenerating
-                      ? null
-                      : () => ref
-                          .read(ambassadorNotifierProvider.notifier)
-                          .generateLink(channel: _selectedChannel),
-                  icon: isGenerating
-                      ? const SizedBox.square(
-                          dimension: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Icon(Icons.add_link_rounded, size: 18),
-                  label: Text(generated != null ? 'Régénérer' : 'Générer'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.brand,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-              if (generated != null) ...[
-                const SizedBox(width: 10),
-                OutlinedButton.icon(
-                  onPressed: () {
-                    Clipboard.setData(ClipboardData(text: generated.url));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Lien copié : ${generated.url}'),
-                        action: SnackBarAction(
-                            label: 'OK', onPressed: () {}),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.share_outlined, size: 18),
-                  label: const Text('Partager'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.brand,
-                    side: const BorderSide(color: AppColors.brand),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// Referral tile
-// ============================================================================
-
-class _ReferralTile extends StatelessWidget {
-  final ReferralModel referral;
-  final VoidCallback onRevoke;
-  const _ReferralTile({required this.referral, required this.onRevoke});
-
-  @override
-  Widget build(BuildContext context) {
-    final (color, label, icon) = referral.isRevoked
-        ? (AppColors.muted, 'Révoqué', Icons.block_outlined)
-        : referral.isExpired
-            ? (AppColors.warning, 'Expiré', Icons.schedule_outlined)
-            : (AppColors.support, 'Actif', Icons.check_circle_outline);
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFEEF0F2)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(Icons.link_rounded, color: color, size: 18),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  referral.code,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                    color: AppColors.foreground,
-                  ),
-                ),
-                if (referral.channel != null)
-                  Text(
-                    referral.channel!,
-                    style: const TextStyle(
-                        fontSize: 11, color: AppColors.muted),
-                  ),
-              ],
-            ),
-          ),
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 12, color: color),
-                const SizedBox(width: 3),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (referral.isActive) ...[
-            const SizedBox(width: 6),
-            GestureDetector(
-              onTap: () => _confirmRevoke(context),
-              child: const Padding(
-                padding: EdgeInsets.all(4),
-                child: Icon(Icons.block_outlined,
-                    size: 18, color: AppColors.muted),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  void _confirmRevoke(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Révoquer ce lien\u00a0?'),
-        content: const Text(
-            'Ce lien ne pourra plus être utilisé pour rejoindre CheReh.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Annuler'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              onRevoke();
-            },
-            style: FilledButton.styleFrom(
-                backgroundColor: AppColors.accent),
-            child: const Text('Révoquer'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// Error body
-// ============================================================================
-
-class _ErrorBody extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-  const _ErrorBody({required this.message, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: AppColors.accentSoft,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.error_outline,
-                  size: 30, color: AppColors.accent),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Une erreur est survenue',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: AppColors.muted),
-            ),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Réessayer'),
-              style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.brand),
-            ),
-          ],
         ),
+      ),
+    );
+  }
+}
+
+IconData _ambIconFromString(String? name) => switch (name) {
+      // Material names
+      'water_drop' => Icons.water_drop_outlined,
+      'favorite' => Icons.favorite_border_rounded,
+      'medical_services' => Icons.medical_services_outlined,
+      'calendar_month' => Icons.calendar_month_outlined,
+      'self_improvement' => Icons.self_improvement_outlined,
+      'vaccines' => Icons.vaccines_outlined,
+      'monitor_heart' => Icons.monitor_heart_outlined,
+      'nightlight' => Icons.nightlight_outlined,
+      'psychology' => Icons.psychology_outlined,
+      'health_and_safety' => Icons.health_and_safety_outlined,
+      // Lucide/Heroicon names (backend)
+      'heart' => Icons.favorite_border_rounded,
+      'shield' => Icons.shield_outlined,
+      'user' => Icons.person_outline_rounded,
+      'users' => Icons.group_outlined,
+      'activity' => Icons.show_chart_rounded,
+      'clipboard' => Icons.assignment_outlined,
+      'calendar' => Icons.calendar_month_outlined,
+      'search' => Icons.search_rounded,
+      _ => Icons.chat_bubble_outline_rounded,
+    };
+
+// ============================================================================
+// Tab 2 — Bénéficiaires
+// ============================================================================
+
+/// Les bénéficiaires suivies par l'ambassadeur, et l'entrée vers leur
+/// évaluation.
+///
+/// Même composant que l'onglet Patients de l'agent de terrain : les deux rôles
+/// conduisent le même parcours, seul l'espace qui l'héberge diffère.
+class _AmbBeneficiariesTab extends StatelessWidget {
+  const _AmbBeneficiariesTab();
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: BeneficiaryDirectoryView(
+        header: const _AmbBeneficiariesHeader(),
+        onSelect: (beneficiary) => _openEvaluation(context, beneficiary),
+      ),
+    );
+  }
+
+  /// C'est le serveur qui décide s'il s'agit d'un démarrage ou de la reprise
+  /// d'une session laissée ouverte lors d'une visite précédente.
+  void _openEvaluation(BuildContext context, BeneficiarySummary beneficiary) {
+    context.goNamed(
+      RouteNames.beneficiaryEvaluation,
+      extra: beneficiary.identityId,
+    );
+  }
+}
+
+class _AmbBeneficiariesHeader extends StatelessWidget {
+  const _AmbBeneficiariesHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Bénéficiaires',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            'Ouvrez une évaluation ou reprenez une visite',
+            style: theme.textTheme.bodySmall?.copyWith(color: AppColors.muted),
+          ),
+        ],
       ),
     );
   }
