@@ -76,14 +76,16 @@ class BeneficiaryIntroScreen extends StatelessWidget {
                   SizedBox(height: rp.spS),
                   _InfoRow(icon: Icons.lock_outline,      text: 'Vos réponses sont confidentielles'),
                   SizedBox(height: rp.spS),
-                  _InfoRow(icon: Icons.wifi_off_outlined, text: 'Fonctionne hors connexion'),
+                  _InfoRow(icon: Icons.lock_outline,      text: 'Données sécurisées et confidentielles'),
 
                   const Spacer(),
 
+                  // L'évaluation est conduite par une ambassadrice ou un agent
+                  // de terrain : cet écran n'a plus d'action à proposer.
                   AppButton(
-                    label: 'Commencer l\'évaluation',
+                    label: 'Voir mes bilans',
                     onPressed: () =>
-                        context.goNamed(RouteNames.beneficiaryEvaluation),
+                        context.goNamed(RouteNames.beneficiaryBilans),
                   ),
 
                   SizedBox(height: rp.spM),

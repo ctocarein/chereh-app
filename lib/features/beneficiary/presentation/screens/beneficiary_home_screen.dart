@@ -4,18 +4,28 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/auth/auth_notifier.dart';
+import '../../../../core/auth/auth_state.dart' show AuthStateAuthenticated;
+import '../../data/datasources/evaluation_remote_datasource.dart';
 import '../../../../core/responsive/app_responsive.dart';
 import '../../../../core/auth/auth_state.dart';
 import '../../../auth/presentation/screens/pin_screen.dart';
 import '../../../../core/presentation/widgets/home_shared_widgets.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/services/beneficiary_preference.dart';
 import '../../data/datasources/evaluation_local_datasource.dart';
 import '../../data/datasources/report_remote_datasource.dart';
 import '../../presentation/providers/evaluation_notifier.dart';
 import '../../presentation/providers/evaluation_state.dart';
 import '../../presentation/providers/recent_bilans_provider.dart';
 import '../../../referral/presentation/widgets/referral_welcome_banner.dart';
+import 'reports_tab_screen.dart';
+
+final completedThemeKeysProvider = FutureProvider<Set<String>>((ref) async {
+  final authState = ref.watch(authNotifierProvider).valueOrNull;
+  if (authState is! AuthStateAuthenticated) return {};
+  return BeneficiaryPreference.getCompletedThemes(authState.user.id);
+});
 
 // ============================================================================
 // Root scaffold with bottom navigation
@@ -41,18 +51,8 @@ class _BeneficiaryHomeScreenState
         index: _tab,
         children: const [
           _HomeTab(),
-          PlaceholderTab(
-            icon: Icons.assignment_outlined,
-            title: 'Mes Évaluations',
-            subtitle:
-                'Historique de vos sessions — bientôt disponible',
-          ),
-          PlaceholderTab(
-            icon: Icons.bar_chart_outlined,
-            title: 'Mes Rapports',
-            subtitle:
-                'Scores, niveaux de risque et recommandations — bientôt disponible',
-          ),
+          _MonSuiviTab(),
+          ReportsTabScreen(),
           SharedProfileTab(),
         ],
       ),
@@ -66,9 +66,9 @@ class _BeneficiaryHomeScreenState
             onTap: () => setState(() => _tab = 0),
           ),
           HomeNavItem(
-            icon: Icons.assignment_outlined,
-            activeIcon: Icons.assignment_rounded,
-            label: 'Évaluations',
+            icon: Icons.favorite_border_rounded,
+            activeIcon: Icons.favorite_rounded,
+            label: 'Mon suivi',
             active: _tab == 1,
             onTap: () => setState(() => _tab = 1),
           ),
@@ -190,7 +190,7 @@ class _HomeTabState extends ConsumerState<_HomeTab>
                         tooltip: 'Scanner un QR',
                       ),
                       const SizedBox(width: 8),
-                      const HomeNotificationButton(badge: 2),
+                      const HomeNotificationButton(badge: 0),
                     ],
                   ),
                 ),
@@ -278,6 +278,309 @@ class _HomeTabState extends ConsumerState<_HomeTab>
 }
 
 // ============================================================================
+// ============================================================================
+// Tab 1 — Mon suivi
+// ============================================================================
+
+// Groupes affichés dans "Mon suivi", dans l'ordre souhaité
+const _suiviGroups = [
+  (
+    intentions: [ThematicIntention.assessment, ThematicIntention.screening],
+    label: 'Évaluation',
+    subtitle: 'Comprendre vos symptômes et risques',
+  ),
+  (
+    intentions: [ThematicIntention.education],
+    label: 'Comprendre',
+    subtitle: 'Explications sur vos résultats et risques',
+  ),
+  (
+    intentions: [
+      ThematicIntention.monitoring,
+      ThematicIntention.followUp,
+      ThematicIntention.preparation,
+    ],
+    label: 'Mon suivi',
+    subtitle: 'Préparer et suivre votre parcours de santé',
+  ),
+  (
+    intentions: [ThematicIntention.sharedDecision],
+    label: 'Décision partagée',
+    subtitle: 'Participer à vos choix de soins',
+  ),
+];
+
+class _MonSuiviTab extends ConsumerWidget {
+  const _MonSuiviTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final blocsAsync = ref.watch(thematicBlocsProvider);
+    final rp = context.rp;
+    final h = rp.hPad;
+
+    return CustomScrollView(
+      physics: const BouncingScrollPhysics(),
+      slivers: [
+        SliverToBoxAdapter(
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(h, 24, h, 0),
+              child: Text(
+                'Mon suivi',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.foreground,
+                    ),
+              ),
+            ),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(h, 4, h, 0),
+            child: Text(
+              'Choisissez un sujet pour démarrer une discussion',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: AppColors.muted),
+            ),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: blocsAsync.when(
+            loading: () => const Center(
+              child: Padding(
+                padding: EdgeInsets.only(top: 48),
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+            error: (_, __) => Center(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 48),
+                child: Text(
+                  'Impossible de charger les sujets',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: AppColors.muted),
+                ),
+              ),
+            ),
+            data: (blocs) => _SuiviGroupedList(blocs: blocs, hPad: h),
+          ),
+        ),
+        const SliverToBoxAdapter(child: SizedBox(height: 32)),
+      ],
+    );
+  }
+}
+
+class _SuiviGroupedList extends StatelessWidget {
+  final List<ThematicBlocDto> blocs;
+  final double hPad;
+  const _SuiviGroupedList({required this.blocs, required this.hPad});
+
+  @override
+  Widget build(BuildContext context) {
+    final sections = <Widget>[];
+
+    for (final group in _suiviGroups) {
+      final grouped = blocs
+          .where((b) => group.intentions.contains(b.intention))
+          .toList();
+      if (grouped.isEmpty) continue;
+
+      sections.add(
+        Padding(
+          padding: EdgeInsets.fromLTRB(hPad, 24, hPad, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                group.label,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.foreground,
+                    ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                group.subtitle,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: AppColors.muted),
+              ),
+              const SizedBox(height: 12),
+              ...grouped.map(
+                (bloc) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _SuiviCard(bloc: bloc),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (sections.isEmpty) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(hPad, 48, hPad, 0),
+        child: Center(
+          child: Text(
+            'Aucun sujet disponible pour le moment',
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: AppColors.muted),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: sections,
+    );
+  }
+}
+
+class _SuiviCard extends ConsumerWidget {
+  final ThematicBlocDto bloc;
+  const _SuiviCard({required this.bloc});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final completed =
+        ref.watch(completedThemeKeysProvider).valueOrNull ?? {};
+    final isDone = completed.contains(bloc.key);
+
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        // Les sujets ne sont plus cliquables : l'évaluation est conduite par
+        // une ambassadrice ou un agent, pas depuis cet écran.
+        onTap: null,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDone
+                  ? AppColors.support.withValues(alpha: 0.4)
+                  : AppColors.surfaceAlt,
+              width: 1.5,
+            ),
+          ),
+          child: Row(
+            children: [
+              Stack(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: isDone
+                          ? AppColors.support.withValues(alpha: 0.12)
+                          : AppColors.brandSoft,
+                      borderRadius: BorderRadius.circular(13),
+                    ),
+                    child: Icon(
+                      bloc.iconData,
+                      color: isDone ? AppColors.support : AppColors.brand,
+                      size: 24,
+                    ),
+                  ),
+                  if (isDone)
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        width: 16,
+                        height: 16,
+                        decoration: const BoxDecoration(
+                          color: AppColors.support,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.check,
+                            size: 10, color: Colors.white),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            bloc.title,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.foreground,
+                                ),
+                          ),
+                        ),
+                        if (isDone)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color:
+                                  AppColors.support.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              'Fait',
+                              style: TextStyle(
+                                color: AppColors.support,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    if (bloc.description != null) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        bloc.description!,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: AppColors.muted),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.arrow_forward_ios_rounded,
+                  size: 14, color: AppColors.muted),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+// ============================================================================
 // Bilan récents — widget dynamique
 // ============================================================================
 
@@ -349,20 +652,32 @@ class _EvalSummary {
   final bool hasStarted;
   final bool isComplete;
   final String? terminationType;
+  final String? blocLabel;
+  final int completedCount;
   const _EvalSummary({
     required this.progress,
     required this.hasStarted,
     required this.isComplete,
     this.terminationType,
+    this.blocLabel,
+    this.completedCount = 0,
   });
 }
 
 /// Lit l'état live du notifier si disponible, sinon charge le stockage local.
 final _evalSummaryProvider = FutureProvider<_EvalSummary>((ref) async {
+  final completed = await ref.watch(completedThemeKeysProvider.future);
+  final count = completed.length;
+
   final live = ref.watch(evaluationNotifierProvider);
   if (live is EvaluationActive) {
     return _EvalSummary(
-        progress: live.progress, hasStarted: true, isComplete: false);
+      progress: live.progress,
+      hasStarted: true,
+      isComplete: false,
+      blocLabel: live.blocLabel,
+      completedCount: count,
+    );
   }
   if (live is EvaluationComplete) {
     return _EvalSummary(
@@ -370,12 +685,14 @@ final _evalSummaryProvider = FutureProvider<_EvalSummary>((ref) async {
       hasStarted: true,
       isComplete: true,
       terminationType: live.session.terminationType,
+      blocLabel: live.blocLabel,
+      completedCount: count,
     );
   }
   final stored = await ref.read(evaluationLocalDatasourceProvider).load();
   if (stored == null) {
-    return const _EvalSummary(
-        progress: 0.0, hasStarted: false, isComplete: false);
+    return _EvalSummary(
+        progress: 0.0, hasStarted: false, isComplete: false, completedCount: count);
   }
   if (stored.isComplete) {
     return _EvalSummary(
@@ -383,6 +700,8 @@ final _evalSummaryProvider = FutureProvider<_EvalSummary>((ref) async {
       hasStarted: true,
       isComplete: true,
       terminationType: stored.terminationType,
+      blocLabel: stored.blocLabel,
+      completedCount: count,
     );
   }
   final answered = stored.answers.length;
@@ -396,6 +715,8 @@ final _evalSummaryProvider = FutureProvider<_EvalSummary>((ref) async {
     progress: progress,
     hasStarted: stored.sessionId != null,
     isComplete: false,
+    blocLabel: stored.blocLabel,
+    completedCount: count,
   );
 });
 
@@ -527,7 +848,12 @@ class _HeroEvaluationCardState extends ConsumerState<_HeroEvaluationCard>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Mon Évaluation',
+                              summary.blocLabel ??
+                                  (summary.isComplete
+                                      ? 'Évaluation terminée'
+                                      : summary.hasStarted
+                                          ? 'Évaluation en cours'
+                                          : 'Mon Évaluation'),
                               style: Theme.of(context)
                                   .textTheme
                                   .titleMedium
@@ -538,7 +864,13 @@ class _HeroEvaluationCardState extends ConsumerState<_HeroEvaluationCard>
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'Comprendre mes symptômes et risques',
+                              summary.isComplete
+                                  ? (summary.completedCount > 1
+                                      ? '${summary.completedCount} thèmes explorés · Continuez dans Mon suivi'
+                                      : 'Explorez d\'autres sujets dans Mon suivi')
+                                  : summary.hasStarted
+                                      ? 'Reprenez là où vous en étiez'
+                                      : 'Comprendre mes symptômes et risques',
                               style: Theme.of(context)
                                   .textTheme
                                   .bodySmall
@@ -652,25 +984,17 @@ class _HeroEvaluationCardState extends ConsumerState<_HeroEvaluationCard>
                         ),
                       ],
                     )
-                  else if (summary.isComplete)
-                    _EvalDoneCta()
                   else
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: () => context
-                            .goNamed(RouteNames.beneficiaryEvaluation),
-                        icon: Icon(
-                          summary.hasStarted
-                              ? Icons.arrow_forward_rounded
-                              : Icons.play_arrow_rounded,
+                        onPressed: () =>
+                            context.goNamed(RouteNames.beneficiaryBilans),
+                        icon: const Icon(
+                          Icons.description_outlined,
                           size: 20,
                         ),
-                        label: Text(
-                          summary.hasStarted
-                              ? 'Continuer l\'évaluation'
-                              : 'Démarrer l\'évaluation',
-                        ),
+                        label: const Text('Voir mes bilans'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white,
                           foregroundColor: AppColors.brand,
@@ -696,36 +1020,6 @@ class _HeroEvaluationCardState extends ConsumerState<_HeroEvaluationCard>
     );
   }
 }
-
-class _EvalDoneCta extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.check_circle_rounded,
-              color: Colors.white, size: 18),
-          const SizedBox(width: 8),
-          Text(
-            'Évaluation complétée',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _LockedCta extends ConsumerWidget {
   const _LockedCta();
 
@@ -805,8 +1099,9 @@ class _BilanItem {
   final String date;
   final _RiskLevel risk;
   final String label;
+  final String? title;
   const _BilanItem(
-      {required this.date, required this.risk, required this.label});
+      {required this.date, required this.risk, required this.label, this.title});
 }
 
 _BilanItem _bilanItemFromReport(ReportSummary r) {
@@ -825,7 +1120,7 @@ _BilanItem _bilanItemFromReport(ReportSummary r) {
     _RiskLevel.none => 'Inconnu',
   };
   final date = DateFormat('MMM yyyy', 'fr_FR').format(r.createdAt);
-  return _BilanItem(date: date, risk: level, label: label);
+  return _BilanItem(date: date, risk: level, label: label, title: r.title);
 }
 
 Color _riskColor(_RiskLevel r) => switch (r) {
@@ -872,6 +1167,21 @@ class _BilanCard extends StatelessWidget {
         children: [
           Icon(_riskIcon(item.risk), color: color, size: 22),
           const Spacer(),
+          if (item.title != null) ...[
+            Text(
+              item.title!,
+              style: Theme.of(context)
+                  .textTheme
+                  .labelSmall
+                  ?.copyWith(
+                    color: AppColors.foreground,
+                    fontWeight: FontWeight.w600,
+                  ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 2),
+          ],
           Text(
             item.date,
             style: Theme.of(context)

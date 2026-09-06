@@ -5,7 +5,6 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../auth/auth_notifier.dart';
 import '../auth/auth_state.dart';
-import '../services/beneficiary_preference.dart';
 import '../services/onboarding_preference.dart';
 import '../../features/splash/presentation/screens/splash_screen.dart';
 import '../../features/onboarding/presentation/screens/onboarding_screen.dart';
@@ -18,7 +17,6 @@ import '../../features/beneficiary/presentation/screens/beneficiary_home_screen.
 import '../../features/beneficiary/data/datasources/report_remote_datasource.dart';
 import '../../features/beneficiary/presentation/screens/bilans_list_screen.dart';
 import '../../features/beneficiary/presentation/screens/report_detail_screen.dart';
-import '../../features/beneficiary/presentation/screens/reports_tab_screen.dart';
 import '../../features/beneficiary/presentation/screens/coming_soon_screens.dart';
 import '../../features/beneficiary/presentation/screens/qr_screens.dart';
 import '../../features/field_agent/presentation/screens/field_agent_home_screen.dart';
@@ -30,10 +28,12 @@ import 'route_names.dart';
 
 part 'app_router.g.dart';
 
-/// Routes accessibles lorsqu'authentifié en tant que bénéficiaire
+/// Routes accessibles lorsqu'authentifié en tant que bénéficiaire.
+///
+/// L'évaluation n'en fait plus partie : elle est conduite par un agent de
+/// terrain ou une ambassadrice, jamais par la bénéficiaire elle-même. Son
+/// espace sert désormais à consulter ses bilans.
 const _beneficiaryRoutes = [
-  RouteNames.beneficiaryIntro,
-  RouteNames.beneficiaryEvaluation,
   RouteNames.beneficiaryHome,
   RouteNames.beneficiaryBilans,
   RouteNames.beneficiaryReportDetail,
@@ -57,8 +57,11 @@ const _fieldAgentRoutes = [
   RouteNames.fieldAgentAssistedEval,
 ];
 
-/// Routes accessibles à tous les rôles authentifiés (ex. évaluation assistée)
-const _sharedAuthRoutes = [
+/// Routes réservées aux rôles qui conduisent une évaluation pour un tiers.
+///
+/// Le chemin porte encore « beneficiary » pour des raisons historiques, mais
+/// l'écran sert l'évaluation assistée : une bénéficiaire n'y accède pas.
+const _evaluatorRoutes = [
   RouteNames.beneficiaryEvaluation,
 ];
 
@@ -102,39 +105,30 @@ GoRouter appRouter(Ref ref) {
           return _homeForRole(authState.user.role);
         }
 
-        // Bénéficiaire
+        // Bénéficiaire : plus d'intro ni d'évaluation à démarrer, on la mène
+        // directement à son espace.
         if (authState.user.role == UserRole.beneficiary) {
-          final hasStarted = await BeneficiaryPreference.hasStartedEvaluation(
-            authState.user.id,
-          );
-          // Intro inaccessible une fois l'évaluation démarrée
-          if (loc == RouteNames.beneficiaryIntro && hasStarted) {
-            return RouteNames.beneficiaryHome;
-          }
           if (_beneficiaryRoutes.contains(loc)) return null;
-          // Routage par défaut
-          return hasStarted
-              ? RouteNames.beneficiaryHome
-              : RouteNames.beneficiaryIntro;
+          return RouteNames.beneficiaryHome;
         }
 
         // Ambassador
         if (authState.user.role == UserRole.ambassador) {
           if (_ambassadorRoutes.contains(loc) ||
-              _sharedAuthRoutes.contains(loc)) { return null; }
+              _evaluatorRoutes.contains(loc)) { return null; }
           return RouteNames.ambassadorHome;
         }
 
         // Field agent
         if (authState.user.role == UserRole.fieldAgent) {
           if (_fieldAgentRoutes.contains(loc) ||
-              _sharedAuthRoutes.contains(loc)) { return null; }
+              _evaluatorRoutes.contains(loc)) { return null; }
           return RouteNames.fieldAgentHome;
         }
 
         // Autres rôles
         final home = _homeForRole(authState.user.role);
-        if (loc == home || _sharedAuthRoutes.contains(loc)) return null;
+        if (loc == home || _evaluatorRoutes.contains(loc)) return null;
         return home;
       }
 
