@@ -14,6 +14,9 @@ import '../../../beneficiary/presentation/providers/evaluation_notifier.dart';
 import '../../../beneficiary/presentation/providers/evaluation_state.dart';
 import '../../domain/models/beneficiary_registration.dart';
 import '../providers/field_agent_notifier.dart';
+import '../../../evaluator/domain/models/beneficiary_summary.dart';
+import '../../../evaluator/presentation/providers/beneficiary_directory_notifier.dart';
+import '../../../evaluator/presentation/widgets/beneficiary_directory_view.dart';
 
 // ============================================================================
 // Root scaffold with bottom navigation
@@ -866,6 +869,88 @@ class _PatientsTab extends ConsumerStatefulWidget {
 }
 
 class _PatientsTabState extends ConsumerState<_PatientsTab> {
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: BeneficiaryDirectoryView(
+        header: const _PatientsHeader(),
+        onSelect: _openEvaluation,
+        onCreate: _openRegisterSheet,
+      ),
+    );
+  }
+
+  /// Ouvre l'évaluation assistée pour cette bénéficiaire. C'est le serveur qui
+  /// décide s'il s'agit d'un démarrage ou de la reprise d'une session laissée
+  /// ouverte lors d'une visite précédente.
+  void _openEvaluation(BeneficiarySummary beneficiary) {
+    context.goNamed(
+      RouteNames.beneficiaryEvaluation,
+      extra: beneficiary.identityId,
+    );
+  }
+
+  Future<void> _openRegisterSheet() async {
+    ref.read(fieldAgentNotifierProvider.notifier).reset();
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.background,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (_) => const _RegisterSheet(),
+    );
+
+    // L'enrôlement a pu créer une fiche : l'annuaire doit la refléter.
+    if (mounted) {
+      ref.read(beneficiaryDirectoryProvider.notifier).refresh();
+    }
+  }
+}
+
+/// En-tête de l'onglet, glissé au-dessus de la barre de recherche de l'annuaire.
+class _PatientsHeader extends StatelessWidget {
+  const _PatientsHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Patients',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            'Retrouvez une bénéficiaire ou enregistrez-en une nouvelle',
+            style: theme.textTheme.bodySmall?.copyWith(color: AppColors.muted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Enrôlement d'une bénéficiaire par son numéro, en feuille modale.
+///
+/// Le formulaire n'occupe plus l'onglet : la liste est ce que l'agent consulte
+/// le plus souvent, l'enrôlement reste ponctuel.
+class _RegisterSheet extends ConsumerStatefulWidget {
+  const _RegisterSheet();
+
+  @override
+  ConsumerState<_RegisterSheet> createState() => _RegisterSheetState();
+}
+
+class _RegisterSheetState extends ConsumerState<_RegisterSheet> {
   final _phoneCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
@@ -888,115 +973,68 @@ class _PatientsTabState extends ConsumerState<_PatientsTab> {
     _phoneCtrl.clear();
   }
 
+  void _startEvaluation(BeneficiaryRegistration result) {
+    Navigator.of(context).pop();
+    context.goNamed(
+      RouteNames.beneficiaryEvaluation,
+      extra: result.identityId,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(fieldAgentNotifierProvider);
-    final isSearching = state is FieldAgentSearching;
 
-    return SafeArea(
-      child: CustomScrollView(
-        physics: const BouncingScrollPhysics(),
-        slivers: [
-          // ── Header ───────────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Patients',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    'Enregistrez ou retrouvez un bénéficiaire',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: AppColors.muted),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // ── Info banner ──────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              child: _InfoCard(
-                text:
-                    'Saisissez le numéro de téléphone du bénéficiaire. '
-                    'S\'il n\'existe pas encore, un compte lui sera créé '
-                    'automatiquement.',
-              ),
-            ),
-          ),
-
-          // ── Search form ──────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-              child: _SearchForm(
-                formKey: _formKey,
-                phoneCtrl: _phoneCtrl,
-                isSearching: isSearching,
-                onSubmit: _submit,
-              ),
-            ),
-          ),
-
-          // ── Result (animated) ─────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              transitionBuilder: (child, anim) => FadeTransition(
-                opacity: anim,
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0, 0.05),
-                    end: Offset.zero,
-                  ).animate(anim),
-                  child: child,
-                ),
-              ),
-              child: switch (state) {
-                FieldAgentFound(:final result) => Padding(
-                  key: ValueKey(result.identityId),
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                  child: _ResultCard(result: result, onReset: _reset),
-                ),
-                FieldAgentError(:final message) => Padding(
-                  key: const ValueKey('error'),
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                  child: _ErrorCard(message: message, onRetry: _submit),
-                ),
-                _ => const SizedBox.shrink(key: ValueKey('idle')),
-              },
-            ),
-          ),
-
-          // ── Reset link ───────────────────────────────────────────────
-          if (state is! FieldAgentIdle)
-            SliverToBoxAdapter(
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                  child: TextButton.icon(
-                    onPressed: _reset,
-                    icon: const Icon(Icons.refresh_rounded, size: 16),
-                    label: const Text('Nouvelle recherche'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.muted,
-                    ),
-                  ),
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 12,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: AppColors.disabled,
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
-
-          const SliverToBoxAdapter(child: SizedBox(height: 40)),
-        ],
+            _InfoCard(
+              text:
+                  'Saisissez le numéro de téléphone du bénéficiaire. '
+                  "S'il n'existe pas encore, un compte lui sera créé "
+                  'automatiquement.',
+            ),
+            const SizedBox(height: 16),
+            _SearchForm(
+              formKey: _formKey,
+              phoneCtrl: _phoneCtrl,
+              isSearching: state is FieldAgentSearching,
+              onSubmit: _submit,
+            ),
+            if (state is FieldAgentFound) ...[
+              const SizedBox(height: 16),
+              _ResultCard(
+                result: state.result,
+                onReset: _reset,
+                onStart: () => _startEvaluation(state.result),
+              ),
+            ],
+            if (state is FieldAgentError) ...[
+              const SizedBox(height: 16),
+              _ErrorCard(message: state.message, onRetry: _submit),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -1162,7 +1200,14 @@ class _ResultCard extends StatelessWidget {
   final BeneficiaryRegistration result;
   final VoidCallback onReset;
 
-  const _ResultCard({required this.result, required this.onReset});
+  /// Ouvre l'evaluation assistee pour cette beneficiaire.
+  final VoidCallback onStart;
+
+  const _ResultCard({
+    required this.result,
+    required this.onReset,
+    required this.onStart,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1304,16 +1349,7 @@ class _ResultCard extends StatelessWidget {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Évaluation assistée — disponible prochainement.',
-                          ),
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    },
+                    onPressed: onStart,
                     icon: const Icon(Icons.assignment_outlined, size: 18),
                     label: const Text('Démarrer l\'évaluation assistée'),
                     style: FilledButton.styleFrom(
