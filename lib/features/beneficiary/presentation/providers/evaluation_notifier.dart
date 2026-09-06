@@ -43,10 +43,18 @@ class EvaluationNotifier extends Notifier<EvaluationState> {
     _newSubject = newSubject;
     state = const EvaluationLoading();
     try {
+      // En mode assisté, la reprise passe par le serveur et non par l'état
+      // local, qui appartient à l'évaluateur et non à la personne qu'il évalue.
+      // Sans cette étape, rouvrir l'écran après une coupure créerait une
+      // seconde fiche au lieu de reprendre la visite commencée.
+      if (subjectId != null || newSubject) {
+        if (await _resumeAssisted()) return;
+        await _startNew();
+        return;
+      }
+
       final local = ref.read(evaluationLocalDatasourceProvider);
-      // En mode assisté, on ne reprend pas la session locale : elle appartient
-      // à l'évaluateur, pas à la personne qu'il évalue.
-      final stored = (subjectId != null || newSubject) ? null : await local.load();
+      final stored = await local.load();
 
       // Tentative de reprise d'une session existante
       if (stored != null &&
@@ -188,6 +196,39 @@ class EvaluationNotifier extends Notifier<EvaluationState> {
         return;
       }
       rethrow;
+    }
+  }
+
+  /// Cherche une visite déjà ouverte pour cet évaluateur et la reprend.
+  /// Retourne vrai si l'état a été posé, faux s'il faut en démarrer une.
+  Future<bool> _resumeAssisted() async {
+    try {
+      final remote = ref.read(evaluationRemoteDatasourceProvider);
+      final current = await remote.getCurrent(subjectId: _subjectId);
+
+      if (current == null ||
+          current.session.status != 'in_progress' ||
+          current.currentQuestion == null) {
+        return false;
+      }
+
+      await _markStarted();
+      final question = current.currentQuestion!;
+      final active = EvaluationActive(
+        session: current.session,
+        messages: [_makeBotMessage(question.text)],
+        answers: const [],
+        questionHistory: [question],
+        currentQuestion: question,
+        progress: 0,
+      );
+      state = active;
+      await _persist(active);
+      return true;
+    } catch (_) {
+      // Réseau indisponible ou session inaccessible : on laisse le démarrage
+      // trancher, il remontera une erreur exploitable.
+      return false;
     }
   }
 

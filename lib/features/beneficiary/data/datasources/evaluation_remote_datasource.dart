@@ -134,9 +134,17 @@ class EvaluationRemoteDatasource {
   }
 
   /// GET /evaluations/current
-  Future<({EvaluationSession session, Question? currentQuestion})?> getCurrent() async {
+  /// [subjectId] : restreint a la session de cette beneficiaire. Sans lui, le
+  /// serveur renvoie la session propre a l'appelant, ou a defaut la derniere
+  /// qu'il conduit pour quelqu'un d'autre.
+  Future<({EvaluationSession session, Question? currentQuestion})?> getCurrent({
+    String? subjectId,
+  }) async {
     try {
-      final res = await _dio.get('/evaluations/current');
+      final res = await _dio.get(
+        '/evaluations/current',
+        queryParameters: {'subject_id': ?subjectId},
+      );
       if (res.data == null) return null;
       final data = res.data as Map<String, dynamic>;
       final sessionData = data['session'] as Map<String, dynamic>? ?? data;
