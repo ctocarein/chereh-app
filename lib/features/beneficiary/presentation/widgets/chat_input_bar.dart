@@ -63,7 +63,14 @@ class _ChatInputBarState extends State<ChatInputBar> {
   void _submit(dynamic value, {File? file}) {
     if (widget.disabled) return;
     if (value is String && value.trim().isEmpty) {
-      setState(() => _error = 'Ce champ est obligatoire.');
+      if (widget.question.required != false) {
+        setState(() => _error = 'Ce champ est obligatoire.');
+        return;
+      }
+      // Champ optionnel vide → skip
+      setState(() => _error = null);
+      HapticFeedback.lightImpact();
+      widget.onAnswer(null, file: file);
       return;
     }
     setState(() => _error = null);
@@ -152,7 +159,14 @@ class _ChatInputBarState extends State<ChatInputBar> {
           controller: _textCtrl,
           keyboardType: TextInputType.multiline,
           maxLines: null,
+          hint: q.placeholder,
           onSend: () => _submit(_textCtrl.text.trim()),
+          trailing: q.allowSkip
+              ? TextButton(
+                  onPressed: () => _submit(''),
+                  child: Text(q.skipLabel),
+                )
+              : null,
         ),
 
       QuestionType.number => _TextInput(
@@ -169,6 +183,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
       QuestionType.radio =>
         _SelectOneInput(
           options: q.options ?? [],
+          suggested: q.suggestedLabel,
           onAnswer: (label) => _submit(q.valueForLabel(label)),
         ),
 
@@ -393,7 +408,14 @@ class _SelectOneInput extends StatelessWidget {
   final List<String> options;
   final void Function(String) onAnswer;
 
-  const _SelectOneInput({required this.options, required this.onAnswer});
+  /// Libelle propose par l'API, a confirmer.
+  final String? suggested;
+
+  const _SelectOneInput({
+    required this.options,
+    required this.onAnswer,
+    this.suggested,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -401,13 +423,18 @@ class _SelectOneInput extends StatelessWidget {
       return _SearchableSelectInput(
         options: options,
         onAnswer: onAnswer,
+        suggested: suggested,
       );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (int i = 0; i < options.length; i++) ...[
-          _RadioCard(label: options[i], onTap: () => onAnswer(options[i])),
+          _RadioCard(
+            label: options[i],
+            highlighted: options[i] == suggested,
+            onTap: () => onAnswer(options[i]),
+          ),
           if (i < options.length - 1) const SizedBox(height: 8),
         ],
       ],
@@ -423,9 +450,16 @@ class _SearchableSelectInput extends StatefulWidget {
   final List<String> options;
   final void Function(String) onAnswer;
 
+  /// Libelle propose par l'API. Preselectionne l'affichage et fait apparaitre
+  /// un bouton de confirmation, mais n'envoie rien tant que personne n'a
+  /// valide : un district enregistre sans que quiconque l'ait regarde
+  /// orienterait une femme vers la mauvaise structure.
+  final String? suggested;
+
   const _SearchableSelectInput({
     required this.options,
     required this.onAnswer,
+    this.suggested,
   });
 
   @override
@@ -435,6 +469,18 @@ class _SearchableSelectInput extends StatefulWidget {
 class _SearchableSelectInputState extends State<_SearchableSelectInput> {
   String? _selected;
 
+  /// Vrai tant que la valeur affichee vient de l'API et n'a pas ete confirmee.
+  bool _isSuggestion = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.suggested != null && widget.options.contains(widget.suggested)) {
+      _selected = widget.suggested;
+      _isSuggestion = true;
+    }
+  }
+
   Future<void> _openSheet() async {
     final result = await showModalBottomSheet<String>(
       context: context,
@@ -443,13 +489,55 @@ class _SearchableSelectInputState extends State<_SearchableSelectInput> {
       builder: (_) => _SelectSearchSheet(options: widget.options),
     );
     if (result != null && mounted) {
-      setState(() => _selected = result);
+      setState(() {
+        _selected = result;
+        _isSuggestion = false;
+      });
       widget.onAnswer(result);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (!_isSuggestion) return _picker();
+
+    // Deux gestes clairement distincts : confirmer ce que l'API propose, ou
+    // ouvrir la liste pour choisir autre chose.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _picker(),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              setState(() => _isSuggestion = false);
+              widget.onAnswer(_selected!);
+            },
+            icon: const Icon(Icons.check_rounded, size: 20),
+            label: Text('Confirmer · ${_selected!}'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.brand,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 0,
+              textStyle: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _picker() {
     return GestureDetector(
       onTap: _openSheet,
       child: AnimatedContainer(
@@ -767,7 +855,16 @@ class _HighlightText extends StatelessWidget {
 class _RadioCard extends StatefulWidget {
   final String label;
   final VoidCallback onTap;
-  const _RadioCard({required this.label, required this.onTap});
+
+  /// Option proposee par l'API : signalee visuellement, mais rien n'est envoye
+  /// tant qu'on ne la touche pas.
+  final bool highlighted;
+
+  const _RadioCard({
+    required this.label,
+    required this.onTap,
+    this.highlighted = false,
+  });
 
   @override
   State<_RadioCard> createState() => _RadioCardState();
@@ -789,10 +886,14 @@ class _RadioCardState extends State<_RadioCard> {
         duration: const Duration(milliseconds: 120),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: _pressed ? AppColors.brandSoft : AppColors.surfaceAlt,
+          color: _pressed || widget.highlighted
+              ? AppColors.brandSoft
+              : AppColors.surfaceAlt,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: _pressed ? AppColors.brand : Colors.transparent,
+            color: _pressed || widget.highlighted
+                ? AppColors.brand
+                : Colors.transparent,
             width: 1.5,
           ),
         ),

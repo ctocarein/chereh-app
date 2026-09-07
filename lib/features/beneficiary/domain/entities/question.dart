@@ -71,6 +71,16 @@ class Question {
   final bool? required;
   final int? stepIndex;
   final int? totalSteps;
+  final String? placeholder;
+  final Map<String, dynamic>? meta;
+
+  /// Valeur que l'API propose, sans l'imposer.
+  ///
+  /// Aujourd'hui le district sanitaire : une ambassadrice evalue presque
+  /// toujours des femmes de son propre district. C'est une proposition a
+  /// confirmer, jamais une reponse deja donnee — une femme peut venir
+  /// d'ailleurs, et c'est le cas ou la reponse compte le plus.
+  final String? suggestedValue;
 
   const Question({
     required this.id,
@@ -84,7 +94,25 @@ class Question {
     this.required,
     this.stepIndex,
     this.totalSteps,
+    this.placeholder,
+    this.meta,
+    this.suggestedValue,
   });
+
+  /// Le libelle correspondant a [suggestedValue], pret a etre affiche.
+  ///
+  /// Null si l'API ne propose rien, ou si la valeur proposee ne figure pas
+  /// dans les options — un referentiel desynchronise ne doit pas afficher un
+  /// code brut a l'ambassadrice.
+  String? get suggestedLabel {
+    final value = suggestedValue;
+    if (value == null || options == null) return null;
+    final label = labelForValue(value);
+    return options!.contains(label) ? label : null;
+  }
+
+  bool get allowSkip => required == false || (meta?['allow_skip'] == true);
+  String get skipLabel => (meta?['skip_label'] as String?) ?? 'Passer';
 
   /// Valeur à envoyer à l'API pour le label [label].
   /// Renvoie [label] si aucune table de correspondance n'est disponible.
@@ -118,6 +146,11 @@ class Question {
       required: json['required'] as bool?,
       stepIndex: json['step_index'] as int?,
       totalSteps: json['total_steps'] as int?,
+      placeholder: json['placeholder'] as String?,
+      suggestedValue: json['suggested_value']?.toString(),
+      meta: json['meta'] is Map<String, dynamic>
+          ? json['meta'] as Map<String, dynamic>
+          : null,
     );
   }
 
@@ -176,6 +209,9 @@ class Question {
       if (required != null) 'required': required,
       if (stepIndex != null) 'step_index': stepIndex,
       if (totalSteps != null) 'total_steps': totalSteps,
+      if (placeholder != null) 'placeholder': placeholder,
+      if (suggestedValue != null) 'suggested_value': suggestedValue,
+      if (meta != null) 'meta': meta,
     };
   }
 
