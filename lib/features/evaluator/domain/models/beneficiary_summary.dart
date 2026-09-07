@@ -86,7 +86,7 @@ class BeneficiarySummary {
   final String identityId;
   final String? name;
   final String? phone;
-  final String? commune;
+  final String? municipality;
   final DateTime? birthDate;
   final LastEvaluation? lastEvaluation;
 
@@ -94,7 +94,7 @@ class BeneficiarySummary {
     required this.identityId,
     this.name,
     this.phone,
-    this.commune,
+    this.municipality,
     this.birthDate,
     this.lastEvaluation,
   });
@@ -136,7 +136,7 @@ class BeneficiarySummary {
       identityId: json['identity_id'].toString(),
       name: _emptyToNull(json['name'] as String?),
       phone: _emptyToNull(json['phone'] as String?),
-      commune: _emptyToNull(json['commune'] as String?),
+      municipality: _emptyToNull(json['municipality'] as String?),
       birthDate: _parseDate(json['birth_date']),
       lastEvaluation: evaluation is Map<String, dynamic>
           ? LastEvaluation.fromJson(evaluation)

@@ -14,7 +14,7 @@ class EvaluatorImpact {
   final int urgentReferrals;
 
   /// Communes où il est intervenu.
-  final List<String> communes;
+  final List<String> municipalities;
 
   final DateTime? activeSince;
 
@@ -23,11 +23,11 @@ class EvaluatorImpact {
     this.evaluationsCompleted = 0,
     this.evaluationsInProgress = 0,
     this.urgentReferrals = 0,
-    this.communes = const [],
+    this.municipalities = const [],
     this.activeSince,
   });
 
-  int get communesCovered => communes.length;
+  int get municipalitiesCovered => municipalities.length;
 
   /// Vrai tant qu'aucune évaluation n'a été conduite : l'écran affiche alors
   /// une invitation plutôt qu'une rangée de zéros.
@@ -38,7 +38,7 @@ class EvaluatorImpact {
         evaluationsCompleted: _toInt(json['evaluations_completed']),
         evaluationsInProgress: _toInt(json['evaluations_in_progress']),
         urgentReferrals: _toInt(json['urgent_referrals']),
-        communes: (json['communes'] as List<dynamic>? ?? const [])
+        municipalities: (json['municipalities'] as List<dynamic>? ?? const [])
             .map((e) => e.toString())
             .where((e) => e.trim().isNotEmpty)
             .toList(),

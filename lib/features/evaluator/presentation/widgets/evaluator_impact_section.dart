@@ -56,8 +56,8 @@ class _ImpactBody extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: _StatTile(
-                value: '${impact.communesCovered}',
-                label: impact.communesCovered > 1
+                value: '${impact.municipalitiesCovered}',
+                label: impact.municipalitiesCovered > 1
                     ? 'zones couvertes'
                     : 'zone couverte',
                 icon: Icons.place_rounded,
@@ -99,7 +99,7 @@ class _ImpactBody extends StatelessWidget {
           _UrgentBanner(count: impact.urgentReferrals),
         ],
 
-        if (impact.communes.isNotEmpty) ...[
+        if (impact.municipalities.isNotEmpty) ...[
           const SizedBox(height: 16),
           Text(
             'Zones couvertes',
@@ -113,7 +113,7 @@ class _ImpactBody extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              for (final commune in impact.communes) _CommuneChip(name: commune),
+              for (final name in impact.municipalities) _MunicipalityChip(name: name),
             ],
           ),
         ],
@@ -218,10 +218,10 @@ class _UrgentBanner extends StatelessWidget {
   }
 }
 
-class _CommuneChip extends StatelessWidget {
+class _MunicipalityChip extends StatelessWidget {
   final String name;
 
-  const _CommuneChip({required this.name});
+  const _MunicipalityChip({required this.name});
 
   @override
   Widget build(BuildContext context) {

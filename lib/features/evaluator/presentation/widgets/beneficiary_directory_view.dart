@@ -295,7 +295,7 @@ class _BeneficiaryTile extends StatelessWidget {
       if (beneficiary.name != null && beneficiary.phone != null)
         beneficiary.phone!,
       if (age != null) '$age ans',
-      if (beneficiary.commune != null) beneficiary.commune!,
+      if (beneficiary.municipality != null) beneficiary.municipality!,
     ];
 
     return ListTile(
