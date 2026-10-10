@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
+import '../../../features/auth/presentation/screens/pin_screen.dart';
 import '../../auth/auth_notifier.dart';
 import '../../auth/auth_state.dart';
-import '../../router/route_names.dart';
 import '../../theme/app_theme.dart';
 
 // ============================================================================
@@ -432,11 +431,14 @@ class SecurityGateBanner extends ConsumerWidget {
             ),
           ),
           TextButton(
-            onPressed: () => context.goNamed(
-              RouteNames.pin,
-              extra: AuthStatePinRequired(
-                sessionToken: user.token,
-                hasPin: false,
+            // Poussé hors du router : celui-ci renvoie vers l'accueil tout
+            // utilisateur authentifié qui atteint /pin. Une fois le PIN créé,
+            // l'état d'auth exige sa vérification et le router prend le relais.
+            onPressed: () => Navigator.of(context, rootNavigator: true).push(
+              MaterialPageRoute<void>(
+                fullscreenDialog: true,
+                builder: (_) =>
+                    PinScreen(sessionToken: user.token, hasPin: false),
               ),
             ),
             style: TextButton.styleFrom(

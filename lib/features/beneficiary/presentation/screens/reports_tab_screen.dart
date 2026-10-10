@@ -97,7 +97,7 @@ class _ReportCard extends StatelessWidget {
     final maxScore = report.maxScore ?? 100;
 
     return GestureDetector(
-      onTap: () => context.goNamed(
+      onTap: () => context.pushNamed(
         RouteNames.beneficiaryReportDetail,
         pathParameters: {'id': report.id.toString()},
         extra: report,

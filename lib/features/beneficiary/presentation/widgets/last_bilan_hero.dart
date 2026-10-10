@@ -249,14 +249,14 @@ class _HeroBilan extends StatelessWidget {
             _SecondaryAction(
               icon: Icons.description_outlined,
               label: 'Voir mon bilan',
-              onPressed: () => context.goNamed(RouteNames.beneficiaryBilans),
+              onPressed: () => context.pushNamed(RouteNames.beneficiaryBilans),
             ),
           ] else
             _PrimaryAction(
               icon: Icons.description_outlined,
               label: 'Voir mon bilan',
               foreground: AppColors.brand,
-              onPressed: () => context.goNamed(RouteNames.beneficiaryBilans),
+              onPressed: () => context.pushNamed(RouteNames.beneficiaryBilans),
             ),
         ],
       ),

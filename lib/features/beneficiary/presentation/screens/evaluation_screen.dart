@@ -11,6 +11,7 @@ import '../../../../core/auth/auth_state.dart';
 import '../../../../core/responsive/app_responsive.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../evaluator/presentation/providers/beneficiary_directory_notifier.dart';
 import '../../domain/entities/evaluation_session.dart';
 import '../providers/evaluation_notifier.dart';
 import '../providers/evaluation_state.dart';
@@ -72,24 +73,43 @@ class _EvaluationScreenState extends ConsumerState<EvaluationScreen> {
     }
   }
 
+  /// En évaluation assistée, l'état encore en mémoire est celui de la visite
+  /// précédente — une autre personne. Il ne doit pas s'afficher, même le temps
+  /// d'une frame, avant que l'initialisation ne reparte du serveur.
+  bool _awaitingInit = false;
+
   @override
   void initState() {
     super.initState();
+    _awaitingInit = widget.isAssisted;
     // Initialisation au prochain frame pour éviter les mutations d'état pendant le build
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final current = ref.read(evaluationNotifierProvider);
-      if (current is EvaluationIdle) {
-        ref.read(evaluationNotifierProvider.notifier).initialize(
-              subjectId: widget.subjectId,
-              newSubject: widget.newSubject,
-            );
+      // Une évaluation assistée repart toujours du serveur : sans cela, ouvrir
+      // une deuxième bénéficiaire réaffichait la session de la première.
+      if (widget.isAssisted || current is EvaluationIdle) {
+        _initialize();
       }
+      if (widget.isAssisted) {
+        // La visite peut créer une fiche : l'annuaire se recharge au retour.
+        ref.invalidate(beneficiaryDirectoryProvider);
+      }
+      if (_awaitingInit) setState(() => _awaitingInit = false);
     });
+  }
+
+  void _initialize() {
+    ref.read(evaluationNotifierProvider.notifier).initialize(
+          subjectId: widget.subjectId,
+          newSubject: widget.newSubject,
+        );
   }
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(evaluationNotifierProvider);
+    final watched = ref.watch(evaluationNotifierProvider);
+    final state = _awaitingInit ? const EvaluationLoading() : watched;
 
     // Redirection automatique en fin d'évaluation
     ref.listen<EvaluationState>(evaluationNotifierProvider, (_, next) {
@@ -134,7 +154,8 @@ class _EvaluationScreenState extends ConsumerState<EvaluationScreen> {
   Widget _buildBody(EvaluationState state) => switch (state) {
         EvaluationLoading() => const _LoadingView(),
         EvaluationIdle() => const _LoadingView(),
-        EvaluationError(:final message) => _ErrorView(message: message),
+        EvaluationError(:final message) =>
+          _ErrorView(message: message, onRetry: _initialize),
         EvaluationActive() => _ActiveView(active: state),
         EvaluationComplete() => _CompleteView(complete: state),
       };
@@ -192,12 +213,17 @@ class _LoadingView extends StatelessWidget {
   }
 }
 
-class _ErrorView extends ConsumerWidget {
+class _ErrorView extends StatelessWidget {
   final String message;
-  const _ErrorView({required this.message});
+
+  /// Relance avec la même cible : sans elle, une évaluation assistée
+  /// repartait sur l'évaluation personnelle de l'évaluateur.
+  final VoidCallback onRetry;
+
+  const _ErrorView({required this.message, required this.onRetry});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -219,7 +245,7 @@ class _ErrorView extends ConsumerWidget {
                     ?.copyWith(color: AppColors.muted)),
             const SizedBox(height: 24),
             FilledButton(
-              onPressed: () => ref.read(evaluationNotifierProvider.notifier).initialize(),
+              onPressed: onRetry,
               child: const Text('Réessayer'),
             ),
           ],

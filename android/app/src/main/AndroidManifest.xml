@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Absente du manifeste principal, l'APK release ne joint aucune API :
+         Flutter ne l'ajoute qu'aux variantes debug et profile. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="chereh_app"
         android:name="${applicationName}"

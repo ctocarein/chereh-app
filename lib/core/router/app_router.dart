@@ -61,8 +61,14 @@ const _fieldAgentRoutes = [
 ///
 /// Le chemin porte encore « beneficiary » pour des raisons historiques, mais
 /// l'écran sert l'évaluation assistée : une bénéficiaire n'y accède pas.
+///
+/// Le dépistage et le conseiller sont proposés par l'écran de fin d'une
+/// évaluation urgente ; le détail d'un rapport, par l'onglet Rapports.
 const _evaluatorRoutes = [
   RouteNames.beneficiaryEvaluation,
+  RouteNames.beneficiaryReportDetail,
+  RouteNames.beneficiaryDepistage,
+  RouteNames.beneficiaryConseiller,
 ];
 
 @riverpod
@@ -72,7 +78,13 @@ GoRouter appRouter(Ref ref) {
   return GoRouter(
     initialLocation: RouteNames.splash,
     redirect: (context, state) async {
-      final loc = state.matchedLocation;
+      // Le motif de la route (« /beneficiary/reports/:id ») plutôt que le
+      // chemin concret (« /beneficiary/reports/12 ») : les listes d'accès
+      // contiennent des motifs, une route paramétrée n'y serait jamais trouvée.
+      final fullPath = state.fullPath;
+      final loc = fullPath != null && fullPath.isNotEmpty
+          ? fullPath
+          : state.matchedLocation;
       final isLoading = authAsync.isLoading || authAsync.isRefreshing;
       final authState = authAsync.valueOrNull;
 
