@@ -14,7 +14,11 @@ final evaluatorImpactDatasourceProvider =
 ///
 /// Sert l'ambassadrice comme l'agent de terrain : l'API borne d'elle-même les
 /// chiffres au travail de l'appelant.
-final evaluatorImpactProvider = FutureProvider<EvaluatorImpact>((ref) {
+///
+/// Libéré avec l'accueil : on y revient après chaque évaluation, et les
+/// chiffres doivent alors en tenir compte.
+final evaluatorImpactProvider =
+    FutureProvider.autoDispose<EvaluatorImpact>((ref) {
   return ref.watch(evaluatorImpactDatasourceProvider).fetch();
 });
 

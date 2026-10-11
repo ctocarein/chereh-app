@@ -155,7 +155,7 @@ class _BeneficiaryDirectoryViewState
                 indent: 76,
                 endIndent: 20,
               ),
-              itemBuilder: (context, index) => _BeneficiaryTile(
+              itemBuilder: (context, index) => BeneficiaryTile(
                 beneficiary: state.items[index],
                 onTap: () => widget.onSelect(state.items[index]),
               ),
@@ -279,11 +279,17 @@ class _FilterBar extends StatelessWidget {
 // Ligne de la liste
 // ---------------------------------------------------------------------------
 
-class _BeneficiaryTile extends StatelessWidget {
+/// Une patiente et l'état de sa dernière évaluation. Partagée avec l'activité
+/// récente de l'accueil, pour qu'une même personne s'y lise de la même façon.
+class BeneficiaryTile extends StatelessWidget {
   final BeneficiarySummary beneficiary;
   final VoidCallback onTap;
 
-  const _BeneficiaryTile({required this.beneficiary, required this.onTap});
+  const BeneficiaryTile({
+    super.key,
+    required this.beneficiary,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {

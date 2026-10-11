@@ -13,6 +13,10 @@ final beneficiaryDirectoryDatasourceProvider =
 /// Filtre sur l'état de la dernière évaluation.
 enum DirectoryFilter {
   all,
+
+  /// Dernière évaluation conduite par l'appelant concluant à un risque modéré
+  /// ou élevé.
+  toFollow,
   inProgress,
   completed,
   never;
@@ -20,6 +24,7 @@ enum DirectoryFilter {
   /// Valeur attendue par l'API. `null` pour « tous ».
   String? get query => switch (this) {
         DirectoryFilter.all => null,
+        DirectoryFilter.toFollow => 'to_follow',
         DirectoryFilter.inProgress => 'in_progress',
         DirectoryFilter.completed => 'completed',
         DirectoryFilter.never => 'never',
@@ -27,11 +32,21 @@ enum DirectoryFilter {
 
   String get label => switch (this) {
         DirectoryFilter.all => 'Tous',
+        DirectoryFilter.toFollow => 'À suivre',
         DirectoryFilter.inProgress => 'En cours',
         DirectoryFilter.completed => 'Évalués',
         DirectoryFilter.never => 'Jamais évalués',
       };
 }
+
+/// Les patientes les plus récemment vues, et le total de l'annuaire.
+///
+/// L'API trie déjà par dernière visite : la première page est l'activité
+/// récente. Libéré avec l'accueil pour être à jour au retour d'une évaluation.
+final recentBeneficiariesProvider =
+    FutureProvider.autoDispose<BeneficiaryDirectoryPage>((ref) {
+  return ref.watch(beneficiaryDirectoryDatasourceProvider).fetch(perPage: 6);
+});
 
 /// Une page de l'annuaire.
 class BeneficiaryDirectoryPage {

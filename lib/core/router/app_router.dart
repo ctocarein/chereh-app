@@ -19,11 +19,10 @@ import '../../features/beneficiary/presentation/screens/bilans_list_screen.dart'
 import '../../features/beneficiary/presentation/screens/report_detail_screen.dart';
 import '../../features/beneficiary/presentation/screens/coming_soon_screens.dart';
 import '../../features/beneficiary/presentation/screens/qr_screens.dart';
-import '../../features/field_agent/presentation/screens/field_agent_home_screen.dart';
 import '../../features/field_agent/presentation/screens/field_agent_qr_screen.dart';
 import '../../features/field_agent/presentation/screens/field_agent_assisted_eval_screen.dart';
-import '../../features/ambassador/presentation/screens/ambassador_home_screen.dart';
 import '../../features/evaluator/domain/models/evaluation_launch.dart';
+import '../../features/evaluator/presentation/screens/evaluator_home_screen.dart';
 import 'route_names.dart';
 
 part 'app_router.g.dart';
@@ -232,7 +231,8 @@ GoRouter appRouter(Ref ref) {
       GoRoute(
         path: RouteNames.fieldAgentHome,
         name: RouteNames.fieldAgentHome,
-        builder: (context, routeState) => const FieldAgentHomeScreen(),
+        // Agent de terrain et ambassadrice partagent le même espace.
+        builder: (context, routeState) => const EvaluatorHomeScreen(),
       ),
       GoRoute(
         path: RouteNames.fieldAgentQr,
@@ -248,7 +248,7 @@ GoRouter appRouter(Ref ref) {
       GoRoute(
         path: RouteNames.ambassadorHome,
         name: RouteNames.ambassadorHome,
-        builder: (context, routeState) => const AmbassadorHomeScreen(),
+        builder: (context, routeState) => const EvaluatorHomeScreen(),
       ),
       GoRoute(
         path: RouteNames.ambassadorQr,
