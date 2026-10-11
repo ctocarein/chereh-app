@@ -3,7 +3,7 @@
          Flutter ne l'ajoute qu'aux variantes debug et profile. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="chereh_app"
+        android:label="CheReh"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -43,6 +43,15 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- Fiches hopital : appeler l'etablissement, ouvrir l'itineraire. -->
+        <intent>
+            <action android:name="android.intent.action.DIAL"/>
+            <data android:scheme="tel"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
         </intent>
     </queries>
 </manifest>

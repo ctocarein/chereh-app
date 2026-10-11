@@ -11,7 +11,6 @@ import '../../features/onboarding/presentation/screens/onboarding_screen.dart';
 import '../../features/onboarding/presentation/screens/privacy_screen.dart';
 import '../../features/auth/presentation/screens/login_or_create_screen.dart';
 import '../../features/auth/presentation/screens/pin_screen.dart';
-import '../../features/beneficiary/presentation/screens/beneficiary_intro_screen.dart';
 import '../../features/beneficiary/presentation/screens/evaluation_screen.dart';
 import '../../features/beneficiary/presentation/screens/beneficiary_home_screen.dart';
 import '../../features/beneficiary/data/datasources/report_remote_datasource.dart';
@@ -19,8 +18,8 @@ import '../../features/beneficiary/presentation/screens/bilans_list_screen.dart'
 import '../../features/beneficiary/presentation/screens/report_detail_screen.dart';
 import '../../features/beneficiary/presentation/screens/coming_soon_screens.dart';
 import '../../features/beneficiary/presentation/screens/qr_screens.dart';
+import '../../features/beneficiary/presentation/screens/screening_centers_screen.dart';
 import '../../features/field_agent/presentation/screens/field_agent_qr_screen.dart';
-import '../../features/field_agent/presentation/screens/field_agent_assisted_eval_screen.dart';
 import '../../features/evaluator/domain/models/evaluation_launch.dart';
 import '../../features/evaluator/presentation/screens/evaluator_home_screen.dart';
 import 'route_names.dart';
@@ -53,7 +52,6 @@ const _ambassadorRoutes = [
 const _fieldAgentRoutes = [
   RouteNames.fieldAgentHome,
   RouteNames.fieldAgentQr,
-  RouteNames.fieldAgentAssistedEval,
 ];
 
 /// Routes réservées aux rôles qui conduisent une évaluation pour un tiers.
@@ -178,11 +176,6 @@ GoRouter appRouter(Ref ref) {
       ),
       // Bénéficiaire
       GoRoute(
-        path: RouteNames.beneficiaryIntro,
-        name: RouteNames.beneficiaryIntro,
-        builder: (context, routeState) => const BeneficiaryIntroScreen(),
-      ),
-      GoRoute(
         path: RouteNames.beneficiaryEvaluation,
         name: RouteNames.beneficiaryEvaluation,
         builder: (context, routeState) {
@@ -215,7 +208,7 @@ GoRouter appRouter(Ref ref) {
       GoRoute(
         path: RouteNames.beneficiaryDepistage,
         name: RouteNames.beneficiaryDepistage,
-        builder: (context, routeState) => const DepistageProximiteScreen(),
+        builder: (context, routeState) => const ScreeningCentersScreen(),
       ),
       GoRoute(
         path: RouteNames.beneficiaryConseiller,
@@ -232,7 +225,9 @@ GoRouter appRouter(Ref ref) {
         path: RouteNames.fieldAgentHome,
         name: RouteNames.fieldAgentHome,
         // Agent de terrain et ambassadrice partagent le même espace.
-        builder: (context, routeState) => const EvaluatorHomeScreen(),
+        builder: (context, routeState) => EvaluatorHomeScreen(
+          arrival: EvaluatorHomeArrival.fromExtra(routeState.extra),
+        ),
       ),
       GoRoute(
         path: RouteNames.fieldAgentQr,
@@ -240,15 +235,11 @@ GoRouter appRouter(Ref ref) {
         builder: (context, routeState) => const FieldAgentQrScreen(),
       ),
       GoRoute(
-        path: RouteNames.fieldAgentAssistedEval,
-        name: RouteNames.fieldAgentAssistedEval,
-        builder: (context, routeState) =>
-            const FieldAgentAssistedEvalScreen(),
-      ),
-      GoRoute(
         path: RouteNames.ambassadorHome,
         name: RouteNames.ambassadorHome,
-        builder: (context, routeState) => const EvaluatorHomeScreen(),
+        builder: (context, routeState) => EvaluatorHomeScreen(
+          arrival: EvaluatorHomeArrival.fromExtra(routeState.extra),
+        ),
       ),
       GoRoute(
         path: RouteNames.ambassadorQr,
@@ -258,7 +249,7 @@ GoRouter appRouter(Ref ref) {
       GoRoute(
         path: RouteNames.ambassadorDepistage,
         name: RouteNames.ambassadorDepistage,
-        builder: (context, routeState) => const DepistageProximiteScreen(),
+        builder: (context, routeState) => const ScreeningCentersScreen(),
       ),
       GoRoute(
         path: RouteNames.ambassadorConseiller,
@@ -270,7 +261,7 @@ GoRouter appRouter(Ref ref) {
 }
 
 String _homeForRole(UserRole role) => switch (role) {
-      UserRole.beneficiary => RouteNames.beneficiaryIntro,
+      UserRole.beneficiary => RouteNames.beneficiaryHome,
       UserRole.fieldAgent => RouteNames.fieldAgentHome,
       UserRole.ambassador => RouteNames.ambassadorHome,
     };

@@ -2,11 +2,34 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/presentation/widgets/home_shared_widgets.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../data/datasources/beneficiary_directory_datasource.dart';
+import '../evaluator_navigation.dart';
 import '../providers/beneficiary_directory_notifier.dart';
 import '../widgets/evaluator_dashboard_tab.dart';
 import '../widgets/evaluator_patients_tab.dart';
-import '../widgets/health_facilities_tab.dart';
+import '../widgets/health_facility_directory.dart';
+
+/// Comment on arrive sur l'espace évaluateur — passé en `extra` de la route.
+///
+/// Au retour d'une évaluation, on reprend sur la liste des patientes avec un
+/// mot de confirmation : l'évaluateur enchaîne sur la suivante sans détour.
+class EvaluatorHomeArrival {
+  final int tab;
+  final String? message;
+
+  /// Propose d'ouvrir aussitôt une nouvelle évaluation depuis le message.
+  final bool offerNextEvaluation;
+
+  const EvaluatorHomeArrival({
+    this.tab = 0,
+    this.message,
+    this.offerNextEvaluation = false,
+  });
+
+  static EvaluatorHomeArrival? fromExtra(Object? extra) =>
+      extra is EvaluatorHomeArrival ? extra : null;
+}
 
 /// L'espace de celles et ceux qui évaluent pour les autres — agent de terrain
 /// ou ambassadrice.
@@ -14,7 +37,11 @@ import '../widgets/health_facilities_tab.dart';
 /// Mêmes onglets pour les deux rôles : seuls le badge, le scan QR et
 /// l'enregistrement par téléphone dépendent du rôle.
 class EvaluatorHomeScreen extends ConsumerStatefulWidget {
-  const EvaluatorHomeScreen({super.key});
+  static const patientsTab = 1;
+
+  final EvaluatorHomeArrival? arrival;
+
+  const EvaluatorHomeScreen({super.key, this.arrival});
 
   @override
   ConsumerState<EvaluatorHomeScreen> createState() =>
@@ -22,7 +49,38 @@ class EvaluatorHomeScreen extends ConsumerStatefulWidget {
 }
 
 class _EvaluatorHomeScreenState extends ConsumerState<EvaluatorHomeScreen> {
-  int _tab = 0;
+  late int _tab = widget.arrival?.tab ?? 0;
+
+  @override
+  void initState() {
+    super.initState();
+    final arrival = widget.arrival;
+    final message = arrival?.message;
+    if (message == null) return;
+
+    // Après la première frame : le Scaffold doit exister pour porter le message.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 5),
+          action: arrival!.offerNextEvaluation
+              ? SnackBarAction(
+                  label: 'Nouvelle évaluation',
+                  textColor: AppColors.brandSoft,
+                  // Le message survit à la navigation : l'écran a pu être
+                  // quitté entre-temps.
+                  onPressed: () {
+                    if (mounted) startNewBeneficiaryEvaluation(context);
+                  },
+                )
+              : null,
+        ),
+      );
+    });
+  }
 
   /// Bascule sur la liste, déjà filtrée : la carte « À suivre » de l'accueil
   /// mène aux patientes qu'elle compte.
@@ -40,7 +98,10 @@ class _EvaluatorHomeScreenState extends ConsumerState<EvaluatorHomeScreen> {
         children: [
           EvaluatorDashboardTab(onOpenPatients: _openPatients),
           const EvaluatorPatientsTab(),
-          const HealthFacilitiesTab(),
+          const HealthFacilityDirectory(
+            title: 'Hôpitaux',
+            subtitle: 'Où orienter une patiente après son évaluation',
+          ),
           const SharedProfileTab(),
         ],
       ),

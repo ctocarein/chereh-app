@@ -46,7 +46,7 @@ class BilansListScreen extends ConsumerWidget {
                 ),
               ),
             ),
-            error: (_, __) => SliverFillRemaining(
+            error: (_, _) => SliverFillRemaining(
               child: _ErrorState(
                 onRetry: () => ref.invalidate(allBilansProvider),
               ),

@@ -77,7 +77,9 @@ class _FieldAgentQrScreenState extends ConsumerState<FieldAgentQrScreen> {
       if (!mounted) return;
       setState(() {
         _state = _ScanState.error;
-        _errorMessage = e.message ?? _friendlyError(e.statusCode);
+        _errorMessage = e.message.isNotEmpty
+            ? e.message
+            : _friendlyError(e.statusCode);
       });
     } catch (_) {
       if (!mounted) return;

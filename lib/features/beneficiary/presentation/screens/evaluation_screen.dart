@@ -12,6 +12,7 @@ import '../../../../core/responsive/app_responsive.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../evaluator/presentation/providers/beneficiary_directory_notifier.dart';
+import '../../../evaluator/presentation/screens/evaluator_home_screen.dart';
 import '../../domain/entities/evaluation_session.dart';
 import '../providers/evaluation_notifier.dart';
 import '../providers/evaluation_state.dart';
@@ -43,35 +44,44 @@ class EvaluationScreen extends ConsumerStatefulWidget {
 
 class _EvaluationScreenState extends ConsumerState<EvaluationScreen> {
   void _handleClose(BuildContext context, EvaluationState state) {
-    // En évaluation assistée, on rend l'évaluateur à SON espace : renvoyer un
-    // ambassadeur vers l'accueil de l'agent de terrain le sortirait du sien.
     if (widget.isAssisted) {
-      final auth = ref.read(authNotifierProvider).valueOrNull;
-      final role = auth is AuthStateAuthenticated ? auth.user.role : null;
-      context.goNamed(
-        role == UserRole.ambassador
-            ? RouteNames.ambassadorHome
-            : RouteNames.fieldAgentHome,
+      _returnToEvaluatorHome(
+        message: switch (state) {
+          EvaluationActive() =>
+            'Visite interrompue : reprenez-la depuis la liste des patientes.',
+          final EvaluationComplete complete => _completionMessage(complete),
+          _ => null,
+        },
       );
       return;
     }
 
-    switch (state) {
-      case EvaluationComplete(:final session):
-        if (session.terminationType == 'consent_declined') {
-          context.goNamed(RouteNames.beneficiaryIntro);
-          return;
-        }
-        context.goNamed(RouteNames.beneficiaryHome);
-        return;
-      case EvaluationActive():
-        context.goNamed(RouteNames.beneficiaryHome);
-        return;
-      default:
-        context.goNamed(RouteNames.beneficiaryIntro);
-        return;
-    }
+    context.goNamed(RouteNames.beneficiaryHome);
   }
+
+  /// Rend l'évaluateur à SON espace — renvoyer une ambassadrice vers l'accueil
+  /// de l'agent de terrain la sortirait du sien —, sur la liste des patientes
+  /// d'où il enchaîne sur la suivante.
+  void _returnToEvaluatorHome({String? message}) {
+    final auth = ref.read(authNotifierProvider).valueOrNull;
+    final role = auth is AuthStateAuthenticated ? auth.user.role : null;
+    context.goNamed(
+      role == UserRole.ambassador
+          ? RouteNames.ambassadorHome
+          : RouteNames.fieldAgentHome,
+      extra: EvaluatorHomeArrival(
+        tab: EvaluatorHomeScreen.patientsTab,
+        message: message,
+        offerNextEvaluation: message != null,
+      ),
+    );
+  }
+
+  /// Ce qu'on dit à l'évaluateur en le rendant à son espace.
+  String _completionMessage(EvaluationComplete complete) =>
+      complete.session.terminationType == 'consent_declined'
+          ? 'Évaluation arrêtée : la patiente n\'a pas donné son accord.'
+          : 'Évaluation enregistrée.';
 
   /// En évaluation assistée, l'état encore en mémoire est celui de la visite
   /// précédente — une autre personne. Il ne doit pas s'afficher, même le temps
@@ -124,8 +134,8 @@ class _EvaluationScreenState extends ConsumerState<EvaluationScreen> {
 
         Future.delayed(const Duration(seconds: 2), () {
           if (mounted && context.mounted) {
-            if (widget.subjectId != null) {
-              context.goNamed(RouteNames.fieldAgentHome);
+            if (widget.isAssisted) {
+              _returnToEvaluatorHome(message: _completionMessage(next));
             } else {
               context.goNamed(RouteNames.beneficiaryHome);
             }
@@ -157,7 +167,12 @@ class _EvaluationScreenState extends ConsumerState<EvaluationScreen> {
         EvaluationError(:final message) =>
           _ErrorView(message: message, onRetry: _initialize),
         EvaluationActive() => _ActiveView(active: state),
-        EvaluationComplete() => _CompleteView(complete: state),
+        EvaluationComplete() => _CompleteView(
+            complete: state,
+            onBackHome: () => widget.isAssisted
+                ? _returnToEvaluatorHome(message: _completionMessage(state))
+                : context.goNamed(RouteNames.beneficiaryHome),
+          ),
       };
 
   PreferredSizeWidget _buildAppBar(BuildContext context, EvaluationState state) {
@@ -287,7 +302,12 @@ class _ActiveView extends ConsumerWidget {
 
 class _CompleteView extends ConsumerStatefulWidget {
   final EvaluationComplete complete;
-  const _CompleteView({required this.complete});
+
+  /// « Retour à l'accueil » : l'espace de l'évaluateur ou celui de la
+  /// bénéficiaire, selon qui conduit l'évaluation.
+  final VoidCallback onBackHome;
+
+  const _CompleteView({required this.complete, required this.onBackHome});
 
   @override
   ConsumerState<_CompleteView> createState() => _CompleteViewState();
@@ -521,12 +541,7 @@ class _CompleteViewState extends ConsumerState<_CompleteView>
                   ),
                   const SizedBox(height: 10),
                   TextButton(
-                    onPressed: () => context.goNamed(
-                      widget.complete.session.status == 'cancelled' &&
-                              widget.complete.session.terminationType == null
-                          ? RouteNames.beneficiaryIntro
-                          : RouteNames.beneficiaryHome,
-                    ),
+                    onPressed: widget.onBackHome,
                     child: const Text("Retour à l'accueil"),
                   ),
                 ],

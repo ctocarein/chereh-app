@@ -10,6 +10,8 @@ class HealthFacility {
   final String? healthDistrict;
   final String? address;
   final String? phone;
+  final double? latitude;
+  final double? longitude;
   final bool hasMammography;
 
   /// Ligne d'exemple posée en attendant le référentiel réel : l'écran la
@@ -24,9 +26,13 @@ class HealthFacility {
     this.healthDistrict,
     this.address,
     this.phone,
+    this.latitude,
+    this.longitude,
     this.hasMammography = false,
     this.isSample = false,
   });
+
+  bool get hasCoordinates => latitude != null && longitude != null;
 
   /// « Cocody · District de Cocody-Bingerville », ce qui est connu.
   String? get location {
@@ -55,6 +61,8 @@ class HealthFacility {
         healthDistrict: _emptyToNull(json['health_district']),
         address: _emptyToNull(json['address']),
         phone: _emptyToNull(json['phone']),
+        latitude: (json['latitude'] as num?)?.toDouble(),
+        longitude: (json['longitude'] as num?)?.toDouble(),
         hasMammography: json['has_mammography'] == true,
         isSample: json['is_sample'] == true,
       );

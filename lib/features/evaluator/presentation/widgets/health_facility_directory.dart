@@ -2,25 +2,42 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../data/datasources/health_facility_datasource.dart';
 import '../../domain/models/health_facility.dart';
 
-/// Où orienter une patiente — avec ou sans mammographe.
-class HealthFacilitiesTab extends ConsumerStatefulWidget {
-  const HealthFacilitiesTab({super.key});
+/// Les établissements où se faire dépister ou orienter une patiente — avec ou
+/// sans mammographe.
+///
+/// Sert l'onglet Hôpitaux de l'évaluateur comme l'écran de dépistage de la
+/// bénéficiaire ; seuls les textes et le filtre de départ changent.
+class HealthFacilityDirectory extends ConsumerStatefulWidget {
+  /// Titre en tête de liste ; `null` quand l'écran hôte porte déjà une barre
+  /// de titre.
+  final String? title;
+  final String subtitle;
+  final MammographyFilter initialFilter;
+
+  const HealthFacilityDirectory({
+    super.key,
+    this.title,
+    required this.subtitle,
+    this.initialFilter = MammographyFilter.all,
+  });
 
   @override
-  ConsumerState<HealthFacilitiesTab> createState() =>
-      _HealthFacilitiesTabState();
+  ConsumerState<HealthFacilityDirectory> createState() =>
+      _HealthFacilityDirectoryState();
 }
 
-class _HealthFacilitiesTabState extends ConsumerState<HealthFacilitiesTab> {
+class _HealthFacilityDirectoryState
+    extends ConsumerState<HealthFacilityDirectory> {
   final _searchCtrl = TextEditingController();
   Timer? _debounce;
 
-  MammographyFilter _filter = MammographyFilter.all;
+  late MammographyFilter _filter = widget.initialFilter;
   String _search = '';
 
   @override
@@ -67,13 +84,14 @@ class _HealthFacilitiesTabState extends ConsumerState<HealthFacilitiesTab> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (widget.title != null)
+                      Text(
+                        widget.title!,
+                        style: theme.textTheme.titleLarge
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
                     Text(
-                      'Hôpitaux',
-                      style: theme.textTheme.titleLarge
-                          ?.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      'Où orienter une patiente après son évaluation',
+                      widget.subtitle,
                       style: theme.textTheme.bodySmall
                           ?.copyWith(color: AppColors.muted),
                     ),
@@ -207,8 +225,7 @@ class _HealthFacilitiesTabState extends ConsumerState<HealthFacilitiesTab> {
   }
 }
 
-/// Prévient que la liste contient des exemples : une évaluatrice ne doit pas
-/// y envoyer une patiente.
+/// Prévient que la liste contient des exemples : personne ne doit s'y rendre.
 class _SampleNotice extends StatelessWidget {
   const _SampleNotice();
 
@@ -230,7 +247,7 @@ class _SampleNotice extends StatelessWidget {
           Expanded(
             child: Text(
               'Certains établissements sont des exemples, en attendant la '
-              'liste officielle. N\'y orientez pas de patiente.',
+              'liste officielle : ils n\'existent pas.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: const Color(0xFF8A6410),
                     height: 1.35,
@@ -351,10 +368,99 @@ class _FacilityCard extends StatelessWidget {
                       ),
                   ],
                 ),
+                // Un exemple n'existe pas : ni numéro à composer, ni lieu où
+                // se rendre.
+                if (!facility.isSample) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      if (facility.phone != null) ...[
+                        _ActionButton(
+                          icon: Icons.call_outlined,
+                          label: 'Appeler',
+                          onTap: () => _open(
+                            context,
+                            Uri(scheme: 'tel', path: facility.phone),
+                            'Impossible de lancer l\'appel.',
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      _ActionButton(
+                        icon: Icons.directions_outlined,
+                        label: 'Itinéraire',
+                        onTap: () => _open(
+                          context,
+                          _directionsUri(facility),
+                          'Impossible d\'ouvrir la carte.',
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// L'itinéraire vers l'établissement : par ses coordonnées quand on les a,
+/// sinon par son nom et sa commune.
+Uri _directionsUri(HealthFacility facility) {
+  if (facility.hasCoordinates) {
+    return Uri.https('www.google.com', '/maps/dir/', {
+      'api': '1',
+      'destination': '${facility.latitude},${facility.longitude}',
+    });
+  }
+  final place = [facility.name, facility.municipality, 'Côte d\'Ivoire']
+      .whereType<String>()
+      .join(', ');
+  return Uri.https('www.google.com', '/maps/search/', {
+    'api': '1',
+    'query': place,
+  });
+}
+
+Future<void> _open(BuildContext context, Uri uri, String failure) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final opened = await launchUrl(uri, mode: LaunchMode.externalApplication)
+      .catchError((_) => false);
+  if (!opened) {
+    messenger.showSnackBar(
+      SnackBar(content: Text(failure), behavior: SnackBarBehavior.floating),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon, size: 16),
+      label: Text(label),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AppColors.brandStrong,
+        side: const BorderSide(color: AppColors.brandSoft, width: 1.5),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        minimumSize: const Size(0, 34),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
       ),
     );
   }

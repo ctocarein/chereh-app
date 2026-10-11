@@ -47,7 +47,9 @@ Dio apiClient(Ref ref) {
 
   dio.interceptors.addAll([
     AuthInterceptor(storage),
-    LogInterceptor(requestBody: true, responseBody: true),
+    // Les corps de requête et de réponse portent des données de santé : en
+    // release, ils n'ont rien à faire dans les logs du téléphone.
+    if (kDebugMode) LogInterceptor(requestBody: true, responseBody: true),
   ]);
 
   return dio;

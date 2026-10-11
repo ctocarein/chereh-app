@@ -6,7 +6,6 @@ abstract class RouteNames {
   static const pin = '/pin';
 
   // Bénéficiaire
-  static const beneficiaryIntro = '/beneficiary/intro';
   static const beneficiaryEvaluation = '/beneficiary/evaluation';
   static const beneficiaryHome = '/beneficiary';
   static const beneficiaryBilans = '/beneficiary/bilans';
@@ -24,5 +23,4 @@ abstract class RouteNames {
   // Field Agent
   static const fieldAgentHome         = '/field-agent';
   static const fieldAgentQr           = '/field-agent/qr';
-  static const fieldAgentAssistedEval = '/field-agent/assisted-eval';
 }

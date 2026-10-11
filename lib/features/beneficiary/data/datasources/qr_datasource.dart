@@ -69,7 +69,7 @@ class QrDatasource {
     try {
       final res = await _dio.post('/qr/scan', data: {
         'code': code,
-        if (deviceInfo != null) 'device_info': deviceInfo,
+        'device_info': ?deviceInfo,
       });
       return QrScanResult.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {

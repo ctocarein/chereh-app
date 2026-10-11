@@ -431,16 +431,7 @@ class SecurityGateBanner extends ConsumerWidget {
             ),
           ),
           TextButton(
-            // Poussé hors du router : celui-ci renvoie vers l'accueil tout
-            // utilisateur authentifié qui atteint /pin. Une fois le PIN créé,
-            // l'état d'auth exige sa vérification et le router prend le relais.
-            onPressed: () => Navigator.of(context, rootNavigator: true).push(
-              MaterialPageRoute<void>(
-                fullscreenDialog: true,
-                builder: (_) =>
-                    PinScreen(sessionToken: user.token, hasPin: false),
-              ),
-            ),
+            onPressed: () => _pushPinCreation(context, user),
             style: TextButton.styleFrom(
               foregroundColor: AppColors.accent,
               padding:
@@ -456,6 +447,29 @@ class SecurityGateBanner extends ConsumerWidget {
     );
   }
 }
+
+/// Ouvre la création du PIN.
+///
+/// Poussée hors du router : celui-ci renvoie vers l'accueil tout utilisateur
+/// authentifié qui atteint /pin. Une fois le PIN créé, l'état d'auth exige sa
+/// vérification et le router prend le relais.
+void _pushPinCreation(BuildContext context, AuthUser user) {
+  Navigator.of(context, rootNavigator: true).push(
+    MaterialPageRoute<void>(
+      fullscreenDialog: true,
+      builder: (_) => PinScreen(sessionToken: user.token, hasPin: false),
+    ),
+  );
+}
+
+/// Un compte sans PIN : il reste à en créer un pour protéger ses données.
+bool _pinMissing(AuthUser user) => user.gateRequired && !user.secretSet;
+
+String _roleLabel(UserRole role) => switch (role) {
+      UserRole.beneficiary => 'Bénéficiaire',
+      UserRole.fieldAgent => 'Agent de terrain',
+      UserRole.ambassador => 'Ambassadrice',
+    };
 
 // ============================================================================
 // Profile tab (shared between beneficiary and ambassador)
@@ -505,6 +519,25 @@ class SharedProfileTab extends ConsumerWidget {
                         .bodyMedium
                         ?.copyWith(color: AppColors.muted),
                   ),
+                  if (user != null) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.brandSoft,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        _roleLabel(user.role),
+                        style: const TextStyle(
+                          color: AppColors.brandStrong,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 28),
                 ],
               ),
@@ -518,27 +551,54 @@ class SharedProfileTab extends ConsumerWidget {
                   _ProfileTile(
                     icon: Icons.person_outline,
                     label: 'Informations personnelles',
-                    onTap: () {},
+                    onTap: user == null
+                        ? null
+                        : () => _showPersonalInfo(context, user),
                   ),
-                  _ProfileTile(
-                    icon: Icons.medical_information_outlined,
-                    label: 'Informations médicales',
-                    onTap: () {},
-                  ),
+                  // Ses propres données de santé : sans objet pour qui évalue
+                  // les autres.
+                  if (user?.role == UserRole.beneficiary)
+                    const _ProfileTile(
+                      icon: Icons.medical_information_outlined,
+                      label: 'Informations médicales',
+                      comingSoon: true,
+                    ),
                   _ProfileTile(
                     icon: Icons.lock_outline,
                     label: 'Sécurité & PIN',
-                    onTap: () {},
+                    trailing: user == null
+                        ? null
+                        : _StatusChip(
+                            label: _pinMissing(user) ? 'À créer' : 'Activé',
+                            color: _pinMissing(user)
+                                ? AppColors.accent
+                                : const Color(0xFF2E7D53),
+                            background: _pinMissing(user)
+                                ? AppColors.accentSoft
+                                : const Color(0xFFDDF3E7),
+                          ),
+                    onTap: user == null
+                        ? null
+                        : () => _pinMissing(user)
+                            ? _pushPinCreation(context, user)
+                            : ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Votre compte est protégé par un code PIN.',
+                                  ),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              ),
                   ),
-                  _ProfileTile(
+                  const _ProfileTile(
                     icon: Icons.notifications_outlined,
                     label: 'Notifications',
-                    onTap: () {},
+                    comingSoon: true,
                   ),
-                  _ProfileTile(
+                  const _ProfileTile(
                     icon: Icons.help_outline,
                     label: 'Aide & Support',
-                    onTap: () {},
+                    comingSoon: true,
                   ),
                   ...extraTiles,
                   const SizedBox(height: 16),
@@ -561,19 +621,100 @@ class SharedProfileTab extends ConsumerWidget {
   }
 }
 
+/// Nom, téléphone et rôle, en lecture : ce que l'application sait de la
+/// personne connectée.
+void _showPersonalInfo(BuildContext context, AuthUser user) {
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.background,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+    ),
+    builder: (context) {
+      Widget row(String label, String value) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 110,
+                  child: Text(
+                    label,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(color: AppColors.muted),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    value.isEmpty ? '—' : value,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AppColors.foreground,
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ),
+              ],
+            ),
+          );
+
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 18),
+                  decoration: BoxDecoration(
+                    color: AppColors.disabled,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Text(
+                'Informations personnelles',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              row('Nom', user.name),
+              row('Téléphone', user.phone),
+              row('Rôle', _roleLabel(user.role)),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
 class _ProfileTile extends StatelessWidget {
   final IconData icon;
   final String label;
   final Color? labelColor;
   final Color? iconColor;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final Widget? trailing;
+
+  /// Pas encore disponible : la ligne l'annonce et ne promet pas d'action.
+  final bool comingSoon;
 
   const _ProfileTile({
     required this.icon,
     required this.label,
-    required this.onTap,
+    this.onTap,
     this.labelColor,
     this.iconColor,
+    this.trailing,
+    this.comingSoon = false,
   });
 
   @override
@@ -582,21 +723,71 @@ class _ProfileTile extends StatelessWidget {
       children: [
         ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-          leading: Icon(icon,
-              color: iconColor ?? AppColors.muted, size: 22),
+          leading: Icon(
+            icon,
+            color: comingSoon
+                ? AppColors.disabled
+                : (iconColor ?? AppColors.muted),
+            size: 22,
+          ),
           title: Text(
             label,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: labelColor ?? AppColors.foreground,
+                  color: comingSoon
+                      ? AppColors.muted
+                      : (labelColor ?? AppColors.foreground),
                   fontWeight: FontWeight.w500,
                 ),
           ),
-          trailing: Icon(Icons.chevron_right,
-              color: AppColors.disabled, size: 20),
-          onTap: onTap,
+          trailing: comingSoon
+              ? const _StatusChip(
+                  label: 'Bientôt',
+                  color: AppColors.muted,
+                  background: AppColors.surfaceAlt,
+                )
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ?trailing,
+                    const Icon(Icons.chevron_right,
+                        color: AppColors.disabled, size: 20),
+                  ],
+                ),
+          onTap: comingSoon ? null : onTap,
         ),
         const Divider(height: 1, color: Color(0xFFF0F2F4)),
       ],
+    );
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  final String label;
+  final Color color;
+  final Color background;
+
+  const _StatusChip({
+    required this.label,
+    required this.color,
+    required this.background,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 11.5,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 }

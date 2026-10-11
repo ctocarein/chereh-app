@@ -49,7 +49,7 @@ class ReportsTabScreen extends ConsumerWidget {
                     color: AppColors.brand, strokeWidth: 2),
               ),
             ),
-            error: (_, __) => SliverFillRemaining(
+            error: (_, _) => SliverFillRemaining(
               child: _ErrorState(
                   onRetry: () => ref.invalidate(allBilansProvider)),
             ),

@@ -3,47 +3,6 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 
 // ============================================================================
-// Dépistage de Proximité — bientôt disponible
-// ============================================================================
-
-class DepistageProximiteScreen extends StatelessWidget {
-  const DepistageProximiteScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return _ComingSoonScreen(
-      title: 'Dépistage de Proximité',
-      subtitle: 'Trouvez un site de dépistage près de chez vous',
-      icon: Icons.location_on_rounded,
-      color: AppColors.accent,
-      colorSoft: AppColors.accentSoft,
-      features: const [
-        _Feature(
-          icon: Icons.map_outlined,
-          label: 'Carte interactive',
-          detail: 'Visualisez les sites de dépistage autour de vous',
-        ),
-        _Feature(
-          icon: Icons.filter_list_rounded,
-          label: 'Filtres avancés',
-          detail: 'Par type d\'examen, distance et disponibilité',
-        ),
-        _Feature(
-          icon: Icons.access_time_rounded,
-          label: 'Horaires en temps réel',
-          detail: 'Jours d\'ouverture, contacts et accès',
-        ),
-        _Feature(
-          icon: Icons.calendar_month_outlined,
-          label: 'Prise de rendez-vous',
-          detail: 'Réservez directement depuis l\'application',
-        ),
-      ],
-    );
-  }
-}
-
-// ============================================================================
 // Parler À Un Conseiller — bientôt disponible
 // ============================================================================
 
